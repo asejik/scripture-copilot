@@ -5,6 +5,7 @@ import { useProjection } from '../../context/ProjectionContext';
 import { normalizeSpokenText } from '../../utils/textNormalizer';
 import { parseScripture } from '../../utils/scriptureParser';
 
+// --- IMPORTS ---
 import kjvData from '../../data/kjv.json';
 import nivData from '../../data/niv.json';
 import nkjvData from '../../data/nkjv.json';
@@ -15,8 +16,11 @@ import gwData from '../../data/gw.json';
 
 const AudioMonitor = () => {
   const [version, setVersion] = useState('KJV');
+
+  // Manual Search States
   const [manualInput, setManualInput] = useState('');
   const [searchError, setSearchError] = useState(null);
+  const [previewScripture, setPreviewScripture] = useState(null); // NEW: Preview State
 
   const getBibleData = () => {
     switch(version) {
@@ -57,8 +61,8 @@ const AudioMonitor = () => {
     currentSlideIndex,
     totalSlides,
     liveScripture,
-    fontSize,        // Get current size
-    updateFontSize   // Get update function
+    fontSize,
+    updateFontSize
   } = useProjection();
 
   const bottomRef = useRef(null);
@@ -69,28 +73,39 @@ const AudioMonitor = () => {
     }
   }, [transcript, interimTranscript]);
 
+  // --- MANUAL SEARCH LOGIC ---
   const handleManualSearch = (e) => {
     e.preventDefault();
     setSearchError(null);
+    setPreviewScripture(null); // Clear previous result
+
     if (!manualInput.trim()) return;
 
     const cleanText = normalizeSpokenText(manualInput);
     const result = parseScripture(cleanText, currentBibleData, version);
 
     if (result) {
-        projectScripture(result);
-        setManualInput('');
+        // INSTEAD OF PROJECTING, WE SET PREVIEW
+        setPreviewScripture(result);
     } else {
         setSearchError(`Scripture not found in ${version}. Check spelling.`);
+    }
+  };
+
+  // --- CONFIRMATION HANDLER ---
+  const confirmProjection = () => {
+    if (previewScripture) {
+        projectScripture(previewScripture);
+        setPreviewScripture(null); // Clear preview after sending
+        setManualInput(''); // Clear input
     }
   };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-6xl mx-auto">
 
-      {/* LEFT COLUMN */}
-      <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-[500px]">
-        {/* Header */}
+      {/* LEFT COLUMN: AUDIO & MANUAL SEARCH */}
+      <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-[600px]"> {/* Increased height slightly */}
         <div className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center">
             <h2 className="text-slate-200 font-semibold flex items-center gap-2">🎙️ Live Audio</h2>
 
@@ -116,7 +131,7 @@ const AudioMonitor = () => {
             </div>
         </div>
 
-        {/* Transcript */}
+        {/* Transcript Area */}
         <div className="flex-1 bg-slate-950 p-6 overflow-y-auto font-mono text-sm leading-relaxed">
             {error && <div className="text-red-400 mb-2">{error}</div>}
             <span className="text-slate-300">{transcript}</span>
@@ -124,16 +139,15 @@ const AudioMonitor = () => {
             <div ref={bottomRef} />
         </div>
 
-        {/* CONTROLS AREA */}
+        {/* CONTROLS & MANUAL SEARCH AREA */}
         <div className="p-4 bg-slate-800 border-t border-slate-700 flex flex-col gap-3">
 
-            {/* Row 1: Audio Buttons */}
             <div className="flex gap-3">
                 <button onClick={isListening ? stopListening : startListening} className={`px-4 py-2 rounded-lg font-medium text-white transition-colors cursor-pointer flex-1 ${isListening ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>{isListening ? 'Stop Mic' : 'Start Mic'}</button>
                 <button onClick={resetTranscript} className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 cursor-pointer">Clear Text</button>
             </div>
 
-            {/* Row 2: Manual Search */}
+            {/* Manual Search Form */}
             <form onSubmit={handleManualSearch} className="flex gap-2 relative">
                 <input
                     type="text"
@@ -142,18 +156,47 @@ const AudioMonitor = () => {
                     placeholder="Type reference (e.g. John 3:16)..."
                     className="flex-1 bg-slate-950 text-white border border-slate-600 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-500"
                 />
-                <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm cursor-pointer">Project</button>
+                <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm cursor-pointer">
+                    Search
+                </button>
             </form>
             {searchError && <div className="text-red-400 text-xs text-center">{searchError}</div>}
+
+            {/* --- NEW: PREVIEW AREA --- */}
+            {previewScripture && (
+                <div className="mt-2 bg-slate-700/50 border border-slate-600 rounded-lg p-3 animate-in fade-in slide-in-from-top-2">
+                    <div className="flex justify-between items-start mb-2">
+                        <span className="text-blue-300 font-bold text-sm">
+                            {previewScripture.reference} ({previewScripture.version})
+                        </span>
+                        <button
+                            onClick={() => setPreviewScripture(null)}
+                            className="text-slate-400 hover:text-white text-xs px-2"
+                        >
+                            ✕
+                        </button>
+                    </div>
+
+                    <p className="text-slate-300 text-xs italic mb-3 line-clamp-3">
+                        "{previewScripture.text}"
+                    </p>
+
+                    <button
+                        onClick={confirmProjection}
+                        className="w-full bg-green-600 hover:bg-green-500 text-white py-2 rounded font-bold text-sm shadow transition-colors"
+                    >
+                        ✔ Confirm & Project
+                    </button>
+                </div>
+            )}
         </div>
       </div>
 
-      {/* RIGHT COLUMN */}
-      <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-[500px]">
+      {/* RIGHT COLUMN: DETECTED RESULTS */}
+      <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-[600px]">
         <div className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center">
             <h2 className="text-purple-400 font-semibold flex items-center gap-2">✨ Detected Scriptures</h2>
 
-            {/* NEW: Font Size Slider in Header */}
             <div className="flex items-center gap-2 bg-slate-900 px-2 py-1 rounded border border-slate-600">
                 <span className="text-xs text-slate-400">Aa</span>
                 <input

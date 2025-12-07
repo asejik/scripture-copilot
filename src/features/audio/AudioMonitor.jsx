@@ -14,14 +14,13 @@ import nltData from '../../data/nlt.json';
 import gwData from '../../data/gw.json';
 
 const AudioMonitor = () => {
-  // Persistence for Version: Load from localStorage or default to KJV
+  // Persistence
   const [version, setVersion] = useState(() => localStorage.getItem('bible_version') || 'KJV');
 
   const [manualInput, setManualInput] = useState('');
   const [searchError, setSearchError] = useState(null);
   const [previewScripture, setPreviewScripture] = useState(null);
 
-  // Update localStorage when version changes
   useEffect(() => {
     localStorage.setItem('bible_version', version);
   }, [version]);
@@ -77,18 +76,18 @@ const AudioMonitor = () => {
     }
   }, [transcript, interimTranscript]);
 
-  // --- SHORTCUTS LISTENER ---
+  // --- SHORTCUTS ---
   useEffect(() => {
     const handleKeyDown = (e) => {
-        // Ignore shortcuts if user is typing in the input box (except Escape)
-        if (e.target.tagName === 'INPUT' && e.key !== 'Escape' && e.key !== 'Enter') return;
+        // Allow typing in textareas and inputs
+        if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && e.key !== 'Escape' && e.key !== 'Enter') return;
 
         switch(e.key) {
             case 'Escape':
                 if (previewScripture) {
-                    setPreviewScripture(null); // Close preview first
+                    setPreviewScripture(null);
                 } else {
-                    clearProjection(); // Then clear screen
+                    clearProjection();
                 }
                 break;
             case 'ArrowRight':
@@ -98,14 +97,14 @@ const AudioMonitor = () => {
                 prevSlide();
                 break;
             case 'Enter':
-                // If we have a preview open, Enter projects it
-                if (previewScripture) {
+                // Only trigger if holding Shift (for new lines) or just Enter (to submit)
+                // Let's make ENTER project, and Shift+Enter add new line
+                if (previewScripture && !e.shiftKey) {
                     e.preventDefault();
                     confirmProjection();
                 }
                 break;
             case 'p':
-                // Alt + P to project detected voice scripture
                 if (e.altKey && detectedScripture) {
                     projectScripture(detectedScripture);
                 }
@@ -160,6 +159,14 @@ const AudioMonitor = () => {
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
+  };
+
+  // NEW: Handle editing the preview text
+  const handlePreviewEdit = (e) => {
+    setPreviewScripture(prev => ({
+        ...prev,
+        text: e.target.value
+    }));
   };
 
   return (
@@ -222,12 +229,22 @@ const AudioMonitor = () => {
                     <div className="flex justify-between items-start mb-2">
                         <span className="text-blue-300 font-bold text-sm">{previewScripture.reference} ({previewScripture.version})</span>
                         <div className="flex gap-2 text-[10px] text-slate-400">
-                           <span>[ENTER] to Project</span>
-                           <span>[ESC] to Cancel</span>
+                           <span>Edit text below if needed</span>
                         </div>
                     </div>
-                    <p className="text-slate-300 text-xs italic mb-3 line-clamp-3">"{previewScripture.text}"</p>
-                    <button onClick={confirmProjection} className="w-full bg-green-600 hover:bg-green-500 text-white py-2 rounded font-bold text-sm shadow transition-colors">✔ Confirm & Project</button>
+
+                    {/* NEW: EDITABLE TEXTAREA */}
+                    <textarea
+                        value={previewScripture.text}
+                        onChange={handlePreviewEdit}
+                        className="w-full bg-slate-800 text-slate-200 text-sm p-2 rounded border border-slate-600 focus:border-blue-500 focus:outline-none mb-2 font-serif"
+                        rows={3}
+                    />
+
+                    <div className="flex gap-2">
+                        <button onClick={() => setPreviewScripture(null)} className="px-3 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded text-sm transition-colors cursor-pointer">Cancel</button>
+                        <button onClick={confirmProjection} className="flex-1 bg-green-600 hover:bg-green-500 text-white py-2 rounded font-bold text-sm shadow transition-colors cursor-pointer">✔ Confirm & Project</button>
+                    </div>
                 </div>
             )}
         </div>
@@ -269,7 +286,6 @@ const AudioMonitor = () => {
                 </div>
             )}
 
-            {/* HISTORY */}
             {history.length > 0 && (
                 <div className="mt-8 pt-4 border-t border-slate-800">
                     <div className="flex justify-between items-center mb-3">

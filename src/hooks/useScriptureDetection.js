@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { normalizeSpokenText } from '../utils/textNormalizer';
 import { parseScripture } from '../utils/scriptureParser';
 
-// NEW: Accepts 'version' as the third argument
 const useScriptureDetection = (transcript, bibleData, version) => {
   const [detectedScripture, setDetectedScripture] = useState(null);
   const [history, setHistory] = useState([]);
@@ -11,8 +10,6 @@ const useScriptureDetection = (transcript, bibleData, version) => {
     if (!transcript || !bibleData) return;
 
     const cleanText = normalizeSpokenText(transcript);
-
-    // Pass the version to the parser
     const result = parseScripture(cleanText, bibleData, version);
 
     if (result) {
@@ -21,17 +18,26 @@ const useScriptureDetection = (transcript, bibleData, version) => {
         const isNewText = prev?.text !== result.text;
 
         if (isNewReference || isNewText) {
+            // Add to history if it's a new reference
             if (isNewReference) {
-                setHistory(h => [result, ...h].slice(0, 10));
+                // Keep history unlimited or cap at 50 for the session
+                setHistory(h => [result, ...h].slice(0, 50));
             }
             return result;
         }
         return prev;
       });
     }
-  }, [transcript, bibleData, version]); // Re-run if version changes
+  }, [transcript, bibleData, version]);
 
-  return { detectedScripture, history };
+  // NEW: Function to manually clear history
+  const clearHistory = () => {
+    setHistory([]);
+    setDetectedScripture(null);
+  };
+
+  // Return the new function
+  return { detectedScripture, history, clearHistory };
 };
 
 export default useScriptureDetection;

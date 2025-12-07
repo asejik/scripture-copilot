@@ -14,10 +14,17 @@ import nltData from '../../data/nlt.json';
 import gwData from '../../data/gw.json';
 
 const AudioMonitor = () => {
-  const [version, setVersion] = useState('KJV');
+  // Persistence for Version: Load from localStorage or default to KJV
+  const [version, setVersion] = useState(() => localStorage.getItem('bible_version') || 'KJV');
+
   const [manualInput, setManualInput] = useState('');
   const [searchError, setSearchError] = useState(null);
   const [previewScripture, setPreviewScripture] = useState(null);
+
+  // Update localStorage when version changes
+  useEffect(() => {
+    localStorage.setItem('bible_version', version);
+  }, [version]);
 
   const getBibleData = () => {
     switch(version) {
@@ -44,7 +51,6 @@ const AudioMonitor = () => {
     error,
   } = useSpeechRecognition();
 
-  // Get clearHistory from the hook
   const { detectedScripture, history, clearHistory } = useScriptureDetection(
     transcript + ' ' + interimTranscript,
     currentBibleData,
@@ -71,6 +77,49 @@ const AudioMonitor = () => {
     }
   }, [transcript, interimTranscript]);
 
+  // --- SHORTCUTS LISTENER ---
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+        // Ignore shortcuts if user is typing in the input box (except Escape)
+        if (e.target.tagName === 'INPUT' && e.key !== 'Escape' && e.key !== 'Enter') return;
+
+        switch(e.key) {
+            case 'Escape':
+                if (previewScripture) {
+                    setPreviewScripture(null); // Close preview first
+                } else {
+                    clearProjection(); // Then clear screen
+                }
+                break;
+            case 'ArrowRight':
+                nextSlide();
+                break;
+            case 'ArrowLeft':
+                prevSlide();
+                break;
+            case 'Enter':
+                // If we have a preview open, Enter projects it
+                if (previewScripture) {
+                    e.preventDefault();
+                    confirmProjection();
+                }
+                break;
+            case 'p':
+                // Alt + P to project detected voice scripture
+                if (e.altKey && detectedScripture) {
+                    projectScripture(detectedScripture);
+                }
+                break;
+            default:
+                break;
+        }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [previewScripture, detectedScripture, nextSlide, prevSlide, clearProjection, projectScripture]);
+
+
   const handleManualSearch = (e) => {
     e.preventDefault();
     setSearchError(null);
@@ -96,26 +145,19 @@ const AudioMonitor = () => {
     }
   };
 
-  // --- NEW: EXPORT LOGIC ---
   const exportHistory = () => {
     if (history.length === 0) return;
-
-    // Create the text content
     const date = new Date().toLocaleDateString();
     let content = `SERMON SCRIPTURE NOTES - ${date}\n\n`;
-
-    // Loop through history (reversed so it's chronological: first verse first)
     [...history].reverse().forEach((item, index) => {
         content += `${index + 1}. ${item.reference} (${item.version})\n`;
         content += `"${item.text}"\n\n`;
     });
-
-    // Create a download link
     const element = document.createElement("a");
     const file = new Blob([content], {type: 'text/plain'});
     element.href = URL.createObjectURL(file);
     element.download = `sermon-notes-${Date.now()}.txt`;
-    document.body.appendChild(element); // Required for this to work in FireFox
+    document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
   };
@@ -176,10 +218,13 @@ const AudioMonitor = () => {
             {searchError && <div className="text-red-400 text-xs text-center">{searchError}</div>}
 
             {previewScripture && (
-                <div className="mt-2 bg-slate-700/50 border border-slate-600 rounded-lg p-3 animate-in fade-in slide-in-from-top-2">
+                <div className="mt-2 bg-slate-700/50 border border-slate-600 rounded-lg p-3 animate-in fade-in slide-in-from-top-2 border-l-4 border-l-blue-500">
                     <div className="flex justify-between items-start mb-2">
                         <span className="text-blue-300 font-bold text-sm">{previewScripture.reference} ({previewScripture.version})</span>
-                        <button onClick={() => setPreviewScripture(null)} className="text-slate-400 hover:text-white text-xs px-2">✕</button>
+                        <div className="flex gap-2 text-[10px] text-slate-400">
+                           <span>[ENTER] to Project</span>
+                           <span>[ESC] to Cancel</span>
+                        </div>
                     </div>
                     <p className="text-slate-300 text-xs italic mb-3 line-clamp-3">"{previewScripture.text}"</p>
                     <button onClick={confirmProjection} className="w-full bg-green-600 hover:bg-green-500 text-white py-2 rounded font-bold text-sm shadow transition-colors">✔ Confirm & Project</button>
@@ -198,7 +243,7 @@ const AudioMonitor = () => {
                 <input type="range" min="30" max="120" value={fontSize} onChange={(e) => updateFontSize(parseInt(e.target.value))} className="w-20 accent-purple-500 cursor-pointer" />
             </div>
 
-            <button onClick={clearProjection} className="text-xs bg-slate-700 hover:bg-red-600 text-white px-3 py-1 rounded transition-colors cursor-pointer">Clear Screen</button>
+            <button onClick={clearProjection} className="text-xs bg-slate-700 hover:bg-red-600 text-white px-3 py-1 rounded transition-colors cursor-pointer" title="[Esc]">Clear Screen</button>
         </div>
 
         <div className="flex-1 bg-slate-900 p-6 overflow-y-auto space-y-4">
@@ -206,14 +251,14 @@ const AudioMonitor = () => {
                 <div className="bg-purple-900/20 border border-purple-500/50 p-6 rounded-xl animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
                     <div className="flex justify-between items-start mb-4">
                         <h3 className="text-2xl font-bold text-white">{detectedScripture.reference} <span className="text-sm font-normal text-purple-300">({detectedScripture.version})</span></h3>
-                        <button onClick={() => projectScripture(detectedScripture)} className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer">PROJECT 📺</button>
+                        <button onClick={() => projectScripture(detectedScripture)} className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer" title="[Alt + P]">PROJECT 📺</button>
                     </div>
                     <p className="text-purple-200 text-lg leading-relaxed font-serif max-h-40 overflow-y-auto mb-4">"{detectedScripture.text}"</p>
                     {liveScripture && totalSlides > 1 && (
                         <div className="flex items-center justify-between bg-slate-800 p-2 rounded-lg border border-slate-600 mt-4">
-                            <button onClick={prevSlide} disabled={currentSlideIndex === 0} className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-30 rounded text-white font-bold transition-colors cursor-pointer">⬅ Prev</button>
+                            <button onClick={prevSlide} disabled={currentSlideIndex === 0} className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-30 rounded text-white font-bold transition-colors cursor-pointer" title="[Left Arrow]">⬅ Prev</button>
                             <span className="text-sm font-mono text-purple-300">Slide {currentSlideIndex + 1} / {totalSlides}</span>
-                            <button onClick={nextSlide} disabled={currentSlideIndex === totalSlides - 1} className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-30 rounded text-white font-bold transition-colors cursor-pointer">Next ➡</button>
+                            <button onClick={nextSlide} disabled={currentSlideIndex === totalSlides - 1} className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-30 rounded text-white font-bold transition-colors cursor-pointer" title="[Right Arrow]">Next ➡</button>
                         </div>
                     )}
                 </div>
@@ -224,31 +269,16 @@ const AudioMonitor = () => {
                 </div>
             )}
 
-            {/* HISTORY SECTION WITH NEW BUTTONS */}
+            {/* HISTORY */}
             {history.length > 0 && (
                 <div className="mt-8 pt-4 border-t border-slate-800">
                     <div className="flex justify-between items-center mb-3">
                         <h4 className="text-slate-500 text-xs uppercase font-bold">Session History</h4>
                         <div className="flex gap-2">
-                             {/* EXPORT BUTTON */}
-                            <button
-                                onClick={exportHistory}
-                                className="text-xs bg-blue-900 hover:bg-blue-700 text-blue-200 px-2 py-1 rounded transition-colors cursor-pointer"
-                                title="Download Sermon Notes"
-                            >
-                                ⬇ Export
-                            </button>
-                             {/* CLEAR BUTTON */}
-                            <button
-                                onClick={clearHistory}
-                                className="text-xs bg-slate-800 hover:bg-red-900 text-slate-400 hover:text-red-200 px-2 py-1 rounded transition-colors cursor-pointer"
-                                title="Clear All History"
-                            >
-                                🗑 Clear
-                            </button>
+                            <button onClick={exportHistory} className="text-xs bg-blue-900 hover:bg-blue-700 text-blue-200 px-2 py-1 rounded transition-colors cursor-pointer">⬇ Export</button>
+                            <button onClick={clearHistory} className="text-xs bg-slate-800 hover:bg-red-900 text-slate-400 hover:text-red-200 px-2 py-1 rounded transition-colors cursor-pointer">🗑 Clear</button>
                         </div>
                     </div>
-
                     {history.slice(1).map((item, idx) => (
                         <div key={idx} className="mb-3 p-3 bg-slate-800/50 rounded flex justify-between items-center group hover:bg-slate-800 transition-colors">
                             <div className="overflow-hidden mr-2">

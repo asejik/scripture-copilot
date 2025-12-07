@@ -2,31 +2,34 @@ import { useState, useEffect } from 'react';
 import { normalizeSpokenText } from '../utils/textNormalizer';
 import { parseScripture } from '../utils/scriptureParser';
 
-const useScriptureDetection = (transcript) => {
+// NEW: Accepts 'version' as the third argument
+const useScriptureDetection = (transcript, bibleData, version) => {
   const [detectedScripture, setDetectedScripture] = useState(null);
   const [history, setHistory] = useState([]);
 
   useEffect(() => {
-    if (!transcript) return;
+    if (!transcript || !bibleData) return;
 
-    // 1. Normalize the text (handle "First John", remove "Chapter")
     const cleanText = normalizeSpokenText(transcript);
 
-    // 2. Attempt to parse
-    const result = parseScripture(cleanText);
+    // Pass the version to the parser
+    const result = parseScripture(cleanText, bibleData, version);
 
     if (result) {
-      // 3. Only update if it's a NEW detection (prevent spamming the same verse)
       setDetectedScripture(prev => {
-        if (prev?.reference !== result.reference) {
-            // Add to history
-            setHistory(h => [result, ...h].slice(0, 10)); // Keep last 10
+        const isNewReference = prev?.reference !== result.reference;
+        const isNewText = prev?.text !== result.text;
+
+        if (isNewReference || isNewText) {
+            if (isNewReference) {
+                setHistory(h => [result, ...h].slice(0, 10));
+            }
             return result;
         }
         return prev;
       });
     }
-  }, [transcript]);
+  }, [transcript, bibleData, version]); // Re-run if version changes
 
   return { detectedScripture, history };
 };

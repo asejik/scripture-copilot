@@ -3,9 +3,15 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 const ProjectionContext = createContext();
 
 export const ProjectionProvider = ({ children }) => {
+  // 1. Load Saved State (Scripture & Font Size)
   const [liveScripture, setLiveScripture] = useState(() => {
     const saved = localStorage.getItem('current_scripture');
     return saved ? JSON.parse(saved) : null;
+  });
+
+  const [fontSize, setFontSize] = useState(() => {
+    const saved = localStorage.getItem('projection_font_size');
+    return saved ? parseInt(saved) : 60; // Default 60px
   });
 
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -13,10 +19,9 @@ export const ProjectionProvider = ({ children }) => {
 
   const channelName = 'scripture_copilot';
 
-  // Helper: Chunk verses into groups of 2
+  // Helper: Chunk verses
   const createSlides = (scripture) => {
     if (!scripture.verseList) {
-        // Single verse case: Ensure reference has version
         let ref = scripture.reference;
         if (scripture.version && !ref.includes(`(${scripture.version})`)) {
             ref += ` (${scripture.version})`;
@@ -26,24 +31,17 @@ export const ProjectionProvider = ({ children }) => {
 
     const VERSES_PER_SLIDE = 2;
     const chunks = [];
-
-    // Get base reference (e.g. "John 3") and version
     const baseRef = scripture.reference.split(':')[0];
     const version = scripture.version;
 
     for (let i = 0; i < scripture.verseList.length; i += VERSES_PER_SLIDE) {
         const chunk = scripture.verseList.slice(i, i + VERSES_PER_SLIDE);
-
         const slideText = chunk.map(v => `${v.verse} ${v.text}`).join(' ');
-
         const startV = chunk[0].verse;
         const endV = chunk[chunk.length - 1].verse;
 
-        // Rebuild reference and append version
         let ref = `${baseRef}:${startV}${startV !== endV ? '-' + endV : ''}`;
-        if (version) {
-            ref += ` (${version})`;
-        }
+        if (version) ref += ` (${version})`;
 
         chunks.push({
             reference: ref,
@@ -59,12 +57,18 @@ export const ProjectionProvider = ({ children }) => {
   useEffect(() => {
     const channel = new BroadcastChannel(channelName);
     channel.onmessage = (event) => {
-      if (event.data.type === 'UPDATE_SLIDE') {
-        setLiveScripture(event.data.payload);
-        localStorage.setItem('current_scripture', JSON.stringify(event.data.payload));
-      } else if (event.data.type === 'CLEAR_SCREEN') {
+      const { type, payload } = event.data;
+
+      if (type === 'UPDATE_SLIDE') {
+        setLiveScripture(payload);
+        localStorage.setItem('current_scripture', JSON.stringify(payload));
+      } else if (type === 'CLEAR_SCREEN') {
         setLiveScripture(null);
         localStorage.removeItem('current_scripture');
+      } else if (type === 'UPDATE_STYLE') {
+        // NEW: Listen for style changes
+        setFontSize(payload.fontSize);
+        localStorage.setItem('projection_font_size', payload.fontSize);
       }
     };
     return () => channel.close();
@@ -74,8 +78,7 @@ export const ProjectionProvider = ({ children }) => {
     const generatedSlides = createSlides(scripture);
     setSlides(generatedSlides);
     setCurrentSlideIndex(0);
-    const firstSlide = generatedSlides[0];
-    updateProjection(firstSlide);
+    updateProjection(generatedSlides[0]);
   };
 
   const nextSlide = () => {
@@ -112,6 +115,15 @@ export const ProjectionProvider = ({ children }) => {
     channel.close();
   };
 
+  // NEW: Action to update Font Size
+  const updateFontSize = (newSize) => {
+    setFontSize(newSize);
+    localStorage.setItem('projection_font_size', newSize);
+    const channel = new BroadcastChannel(channelName);
+    channel.postMessage({ type: 'UPDATE_STYLE', payload: { fontSize: newSize } });
+    channel.close();
+  };
+
   return (
     <ProjectionContext.Provider value={{
         liveScripture,
@@ -120,7 +132,9 @@ export const ProjectionProvider = ({ children }) => {
         nextSlide,
         prevSlide,
         currentSlideIndex,
-        totalSlides: slides.length
+        totalSlides: slides.length,
+        fontSize,         // Export State
+        updateFontSize    // Export Action
     }}>
       {children}
     </ProjectionContext.Provider>

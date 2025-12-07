@@ -2,12 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import useSpeechRecognition from '../../hooks/useSpeechRecognition';
 import useScriptureDetection from '../../hooks/useScriptureDetection';
 import { useProjection } from '../../context/ProjectionContext';
-
-// --- UTILITIES FOR MANUAL SEARCH ---
 import { normalizeSpokenText } from '../../utils/textNormalizer';
 import { parseScripture } from '../../utils/scriptureParser';
 
-// --- IMPORTS ---
 import kjvData from '../../data/kjv.json';
 import nivData from '../../data/niv.json';
 import nkjvData from '../../data/nkjv.json';
@@ -18,8 +15,6 @@ import gwData from '../../data/gw.json';
 
 const AudioMonitor = () => {
   const [version, setVersion] = useState('KJV');
-
-  // Manual Search State
   const [manualInput, setManualInput] = useState('');
   const [searchError, setSearchError] = useState(null);
 
@@ -61,7 +56,9 @@ const AudioMonitor = () => {
     prevSlide,
     currentSlideIndex,
     totalSlides,
-    liveScripture
+    liveScripture,
+    fontSize,        // Get current size
+    updateFontSize   // Get update function
   } = useProjection();
 
   const bottomRef = useRef(null);
@@ -72,23 +69,17 @@ const AudioMonitor = () => {
     }
   }, [transcript, interimTranscript]);
 
-  // --- MANUAL SEARCH LOGIC ---
   const handleManualSearch = (e) => {
     e.preventDefault();
     setSearchError(null);
-
     if (!manualInput.trim()) return;
 
-    // 1. Normalize the typed input (e.g. "jn 3 16" -> "john 3:16")
     const cleanText = normalizeSpokenText(manualInput);
-
-    // 2. Parse it using the SAME logic as the AI
     const result = parseScripture(cleanText, currentBibleData, version);
 
     if (result) {
-        // 3. If found, project immediately!
         projectScripture(result);
-        setManualInput(''); // Clear bar
+        setManualInput('');
     } else {
         setSearchError(`Scripture not found in ${version}. Check spelling.`);
     }
@@ -99,6 +90,7 @@ const AudioMonitor = () => {
 
       {/* LEFT COLUMN */}
       <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-[500px]">
+        {/* Header */}
         <div className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center">
             <h2 className="text-slate-200 font-semibold flex items-center gap-2">🎙️ Live Audio</h2>
 
@@ -124,6 +116,7 @@ const AudioMonitor = () => {
             </div>
         </div>
 
+        {/* Transcript */}
         <div className="flex-1 bg-slate-950 p-6 overflow-y-auto font-mono text-sm leading-relaxed">
             {error && <div className="text-red-400 mb-2">{error}</div>}
             <span className="text-slate-300">{transcript}</span>
@@ -131,30 +124,25 @@ const AudioMonitor = () => {
             <div ref={bottomRef} />
         </div>
 
-        {/* CONTROLS & MANUAL SEARCH AREA */}
+        {/* CONTROLS AREA */}
         <div className="p-4 bg-slate-800 border-t border-slate-700 flex flex-col gap-3">
 
-            {/* Row 1: Audio Controls */}
+            {/* Row 1: Audio Buttons */}
             <div className="flex gap-3">
                 <button onClick={isListening ? stopListening : startListening} className={`px-4 py-2 rounded-lg font-medium text-white transition-colors cursor-pointer flex-1 ${isListening ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>{isListening ? 'Stop Mic' : 'Start Mic'}</button>
                 <button onClick={resetTranscript} className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 cursor-pointer">Clear Text</button>
             </div>
 
-            {/* Row 2: Manual Search Form */}
+            {/* Row 2: Manual Search */}
             <form onSubmit={handleManualSearch} className="flex gap-2 relative">
                 <input
                     type="text"
                     value={manualInput}
                     onChange={(e) => setManualInput(e.target.value)}
-                    placeholder="Type reference (e.g. John 3:16) & Hit Enter"
+                    placeholder="Type reference (e.g. John 3:16)..."
                     className="flex-1 bg-slate-950 text-white border border-slate-600 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-500"
                 />
-                <button
-                    type="submit"
-                    className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm cursor-pointer"
-                >
-                    Project
-                </button>
+                <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm cursor-pointer">Project</button>
             </form>
             {searchError && <div className="text-red-400 text-xs text-center">{searchError}</div>}
         </div>
@@ -164,23 +152,30 @@ const AudioMonitor = () => {
       <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-[500px]">
         <div className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center">
             <h2 className="text-purple-400 font-semibold flex items-center gap-2">✨ Detected Scriptures</h2>
-            <button onClick={clearProjection} className="text-xs bg-slate-700 hover:bg-red-600 text-white px-3 py-1 rounded transition-colors cursor-pointer">Clear Screen</button>
+
+            {/* NEW: Font Size Slider in Header */}
+            <div className="flex items-center gap-2 bg-slate-900 px-2 py-1 rounded border border-slate-600">
+                <span className="text-xs text-slate-400">Aa</span>
+                <input
+                    type="range"
+                    min="30" max="120"
+                    value={fontSize}
+                    onChange={(e) => updateFontSize(parseInt(e.target.value))}
+                    className="w-20 accent-purple-500 cursor-pointer"
+                />
+            </div>
+
+            <button onClick={clearProjection} className="text-xs bg-slate-700 hover:bg-red-600 text-white px-3 py-1 rounded transition-colors cursor-pointer">Clear</button>
         </div>
 
         <div className="flex-1 bg-slate-900 p-6 overflow-y-auto space-y-4">
             {detectedScripture ? (
                 <div className="bg-purple-900/20 border border-purple-500/50 p-6 rounded-xl animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
-
                     <div className="flex justify-between items-start mb-4">
                         <h3 className="text-2xl font-bold text-white">
-                            {detectedScripture.reference} ({detectedScripture.version})
+                            {detectedScripture.reference} <span className="text-sm font-normal text-purple-300">({detectedScripture.version})</span>
                         </h3>
-
-                        <button
-                            onClick={() => projectScripture(detectedScripture)}
-                            className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer">
-                            PROJECT 📺
-                        </button>
+                        <button onClick={() => projectScripture(detectedScripture)} className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer">PROJECT 📺</button>
                     </div>
 
                     <p className="text-purple-200 text-lg leading-relaxed font-serif max-h-40 overflow-y-auto mb-4">
@@ -208,9 +203,7 @@ const AudioMonitor = () => {
                     {history.slice(1).map((item, idx) => (
                         <div key={idx} className="mb-3 p-3 bg-slate-800/50 rounded flex justify-between items-center group hover:bg-slate-800 transition-colors">
                             <div className="overflow-hidden mr-2">
-                                <span className="text-purple-400 font-bold text-sm block">
-                                    {item.reference} ({item.version})
-                                </span>
+                                <span className="text-purple-400 font-bold text-sm block">{item.reference} ({item.version})</span>
                                 <span className="text-slate-400 text-xs truncate block">{item.text}</span>
                             </div>
                             <button onClick={() => projectScripture(item)} className="opacity-0 group-hover:opacity-100 bg-slate-700 hover:bg-purple-600 text-white text-xs px-3 py-1 rounded transition-all cursor-pointer">Show</button>

@@ -1,53 +1,79 @@
-import bibleData from '../data/kjv.json'; // Importing the JSON file directly
-
-// List of books to validate against (prevents false positives like "James went to the store")
-// We get these keys from your JSON file
-const VALID_BOOKS = Object.keys(bibleData).map(b => b.toLowerCase());
+import bibleData from '../data/kjv.json';
+import { BOOK_ALIASES } from './bookMapping';
 
 export const parseScripture = (text) => {
   if (!text) return null;
 
-  // Regex Breakdown:
-  // (\d\s?)?       -> Optional number prefix (e.g., "1" in "1 John")
-  // ([a-z]+)       -> The Book Name (e.g., "John")
-  // \s+            -> Space
-  // (\d+)          -> Chapter Number
-  // [:.\s]+        -> Separator (colon, dot, or space)
-  // (\d+)          -> Verse Number
-  const regex = /(\d\s?)?([a-z]+)\s+(\d+)[:.\s]+(\d+)/gi;
+  // Regex matches: "1 John 3 16" or "John 3:16"
+  // (\d\s?)?     -> Optional "1 "
+  // ([a-z]+)     -> Book name
+  // \s+          -> Space
+  // (\d+)        -> Chapter
+  // [:.\s]* -> Separator
+  // (\d+)        -> Verse (Optional for now to catch "Leviticus 39")
+  const regex = /(\d\s?)?([a-z]+)\s+(\d+)[:.\s]*(\d*)/gi;
 
+  const matches = [];
   let match;
-  const results = [];
 
-  // Iterate through all matches in the text
   while ((match = regex.exec(text)) !== null) {
-    const [fullMatch, numberPrefix, bookName, chapter, verse] = match;
+    let [fullMatch, numberPrefix, bookName, chapter, verse] = match;
 
-    // Construct the book name (e.g., "1 john" or just "john")
-    let cleanBookName = numberPrefix ? `${numberPrefix.trim()} ${bookName}` : bookName;
-    cleanBookName = cleanBookName.trim().toLowerCase();
+    // Construct the spoken book name (e.g. "1 john")
+    let spokenBook = numberPrefix ? `${numberPrefix.trim()} ${bookName}` : bookName;
+    spokenBook = spokenBook.trim().toLowerCase();
 
-    // Verification: Is this actually a Bible book?
-    // We check if our JSON has this book (fuzzy match could be added later)
-    const validBookKey = Object.keys(bibleData).find(key =>
-      key.toLowerCase() === cleanBookName
-    );
+    // LOOKUP 1: Check the Alias Map
+    // This turns "revelations" -> "Revelation"
+    const realBookKey = BOOK_ALIASES[spokenBook];
 
-    if (validBookKey) {
-      // Look up the text in the JSON
-      // Safety checks using Optional Chaining (?.)
-      const verseText = bibleData[validBookKey]?.[chapter]?.[verse];
+    if (realBookKey && bibleData[realBookKey]) {
+        let finalChapter = parseInt(chapter);
+        let finalVerse = verse ? parseInt(verse) : null;
+        const bookData = bibleData[realBookKey];
 
-      if (verseText) {
-        results.push({
-          reference: `${validBookKey} ${chapter}:${verse}`,
-          text: verseText,
-          timestamp: Date.now()
-        });
-      }
+        // Logic A: Standard "Chapter:Verse" (e.g., John 3:16)
+        if (finalVerse && bookData[finalChapter]?.[finalVerse]) {
+            matches.push({
+                reference: `${realBookKey} ${finalChapter}:${finalVerse}`,
+                text: bookData[finalChapter][finalVerse],
+                timestamp: Date.now()
+            });
+            continue;
+        }
+
+        // Logic B: "Merged Numbers" (e.g., "Revelation 320" -> 3:20)
+        // If we have a chapter but no verse, OR the chapter doesn't exist (Chapter 320)
+        if (!bookData[finalChapter] || (!finalVerse && chapter.length >= 2)) {
+            // Try splitting the "Chapter" string
+            const numStr = chapter.toString();
+
+            // Try splitting at index 1 (e.g. 320 -> 3:20, 49 -> 4:9)
+            // We prioritize matching the longest possible chapter that actually exists
+
+            // Split "320" -> try "3" and "20"
+            let tryChap = parseInt(numStr.substring(0, numStr.length - 2) || numStr[0]);
+            let tryVerse = parseInt(numStr.substring(numStr.length - 2) || numStr.slice(1));
+
+            // Adjust split logic for 3 digits specifically (e.g. 119 -> 1:19)
+            if (numStr.length === 3) {
+                 tryChap = parseInt(numStr[0]);
+                 tryVerse = parseInt(numStr.slice(1));
+            } else if (numStr.length === 2) {
+                 tryChap = parseInt(numStr[0]);
+                 tryVerse = parseInt(numStr[1]);
+            }
+
+            if (bookData[tryChap]?.[tryVerse]) {
+                matches.push({
+                    reference: `${realBookKey} ${tryChap}:${tryVerse}`,
+                    text: bookData[tryChap][tryVerse],
+                    timestamp: Date.now()
+                });
+            }
+        }
     }
   }
 
-  // Return the most recent match found in this chunk
-  return results.length > 0 ? results[results.length - 1] : null;
+  return matches.length > 0 ? matches[matches.length - 1] : null;
 };

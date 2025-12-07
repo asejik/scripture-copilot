@@ -3,6 +3,10 @@ import useSpeechRecognition from '../../hooks/useSpeechRecognition';
 import useScriptureDetection from '../../hooks/useScriptureDetection';
 import { useProjection } from '../../context/ProjectionContext';
 
+// --- UTILITIES FOR MANUAL SEARCH ---
+import { normalizeSpokenText } from '../../utils/textNormalizer';
+import { parseScripture } from '../../utils/scriptureParser';
+
 // --- IMPORTS ---
 import kjvData from '../../data/kjv.json';
 import nivData from '../../data/niv.json';
@@ -14,6 +18,10 @@ import gwData from '../../data/gw.json';
 
 const AudioMonitor = () => {
   const [version, setVersion] = useState('KJV');
+
+  // Manual Search State
+  const [manualInput, setManualInput] = useState('');
+  const [searchError, setSearchError] = useState(null);
 
   const getBibleData = () => {
     switch(version) {
@@ -40,7 +48,6 @@ const AudioMonitor = () => {
     error,
   } = useSpeechRecognition();
 
-  // Pass 'version' to the hook here
   const { detectedScripture, history } = useScriptureDetection(
     transcript + ' ' + interimTranscript,
     currentBibleData,
@@ -64,6 +71,28 @@ const AudioMonitor = () => {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [transcript, interimTranscript]);
+
+  // --- MANUAL SEARCH LOGIC ---
+  const handleManualSearch = (e) => {
+    e.preventDefault();
+    setSearchError(null);
+
+    if (!manualInput.trim()) return;
+
+    // 1. Normalize the typed input (e.g. "jn 3 16" -> "john 3:16")
+    const cleanText = normalizeSpokenText(manualInput);
+
+    // 2. Parse it using the SAME logic as the AI
+    const result = parseScripture(cleanText, currentBibleData, version);
+
+    if (result) {
+        // 3. If found, project immediately!
+        projectScripture(result);
+        setManualInput(''); // Clear bar
+    } else {
+        setSearchError(`Scripture not found in ${version}. Check spelling.`);
+    }
+  };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-6xl mx-auto">
@@ -102,9 +131,32 @@ const AudioMonitor = () => {
             <div ref={bottomRef} />
         </div>
 
-        <div className="p-4 bg-slate-800 border-t border-slate-700 flex gap-3">
-            <button onClick={isListening ? stopListening : startListening} className={`px-4 py-2 rounded-lg font-medium text-white transition-colors cursor-pointer ${isListening ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>{isListening ? 'Stop' : 'Start'}</button>
-            <button onClick={resetTranscript} className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 cursor-pointer">Clear Text</button>
+        {/* CONTROLS & MANUAL SEARCH AREA */}
+        <div className="p-4 bg-slate-800 border-t border-slate-700 flex flex-col gap-3">
+
+            {/* Row 1: Audio Controls */}
+            <div className="flex gap-3">
+                <button onClick={isListening ? stopListening : startListening} className={`px-4 py-2 rounded-lg font-medium text-white transition-colors cursor-pointer flex-1 ${isListening ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>{isListening ? 'Stop Mic' : 'Start Mic'}</button>
+                <button onClick={resetTranscript} className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 cursor-pointer">Clear Text</button>
+            </div>
+
+            {/* Row 2: Manual Search Form */}
+            <form onSubmit={handleManualSearch} className="flex gap-2 relative">
+                <input
+                    type="text"
+                    value={manualInput}
+                    onChange={(e) => setManualInput(e.target.value)}
+                    placeholder="Type reference (e.g. John 3:16) & Hit Enter"
+                    className="flex-1 bg-slate-950 text-white border border-slate-600 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-500"
+                />
+                <button
+                    type="submit"
+                    className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm cursor-pointer"
+                >
+                    Project
+                </button>
+            </form>
+            {searchError && <div className="text-red-400 text-xs text-center">{searchError}</div>}
         </div>
       </div>
 
@@ -120,7 +172,6 @@ const AudioMonitor = () => {
                 <div className="bg-purple-900/20 border border-purple-500/50 p-6 rounded-xl animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
 
                     <div className="flex justify-between items-start mb-4">
-                        {/* UPDATED HEADING FORMAT */}
                         <h3 className="text-2xl font-bold text-white">
                             {detectedScripture.reference} ({detectedScripture.version})
                         </h3>
@@ -151,7 +202,6 @@ const AudioMonitor = () => {
                 </div>
             )}
 
-            {/* History List showing version */}
             {history.length > 0 && (
                 <div className="mt-8 pt-4 border-t border-slate-800">
                     <h4 className="text-slate-500 text-xs uppercase font-bold mb-3">Previous Detections</h4>

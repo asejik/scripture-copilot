@@ -64,7 +64,9 @@ const AudioMonitor = () => {
     totalSlides,
     liveScripture,
     fontSize,
-    updateFontSize
+    updateFontSize,
+    theme,         // Get Theme
+    updateTheme    // Get Updater
   } = useProjection();
 
   const bottomRef = useRef(null);
@@ -157,12 +159,10 @@ const AudioMonitor = () => {
     document.body.removeChild(element);
   };
 
-  // --- THE FIX IS HERE ---
   const handlePreviewEdit = (e) => {
     setPreviewScripture(prev => ({
         ...prev,
         text: e.target.value,
-        // CRITICAL FIX: Clear the strict verse list so the system uses the new text
         verseList: null
     }));
   };
@@ -252,12 +252,36 @@ const AudioMonitor = () => {
         <div className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center">
             <h2 className="text-purple-400 font-semibold flex items-center gap-2">✨ Detected Scriptures</h2>
 
-            <div className="flex items-center gap-2 bg-slate-900 px-2 py-1 rounded border border-slate-600">
-                <span className="text-xs text-slate-400">Aa</span>
-                <input type="range" min="30" max="120" value={fontSize} onChange={(e) => updateFontSize(parseInt(e.target.value))} className="w-20 accent-purple-500 cursor-pointer" />
+            {/* STYLING CONTROLS */}
+            <div className="flex items-center gap-3">
+                {/* 1. Font Slider */}
+                <div className="flex items-center gap-1 bg-slate-900 px-2 py-1 rounded border border-slate-600" title="Font Size">
+                    <span className="text-xs text-slate-400">Aa</span>
+                    <input type="range" min="30" max="120" value={fontSize} onChange={(e) => updateFontSize(parseInt(e.target.value))} className="w-16 accent-purple-500 cursor-pointer" />
+                </div>
+
+                {/* 2. Color Pickers (Theme) */}
+                <div className="flex items-center gap-1 bg-slate-900 px-2 py-1 rounded border border-slate-600">
+                    {/* Background Color */}
+                    <input
+                        type="color"
+                        value={theme.backgroundColor}
+                        onChange={(e) => updateTheme('backgroundColor', e.target.value)}
+                        className="w-6 h-6 rounded cursor-pointer border-none p-0 bg-transparent"
+                        title="Background Color (Green Screen)"
+                    />
+                    {/* Text Color */}
+                    <input
+                        type="color"
+                        value={theme.textColor}
+                        onChange={(e) => updateTheme('textColor', e.target.value)}
+                        className="w-6 h-6 rounded cursor-pointer border-none p-0 bg-transparent"
+                        title="Text Color"
+                    />
+                </div>
             </div>
 
-            <button onClick={clearProjection} className="text-xs bg-slate-700 hover:bg-red-600 text-white px-3 py-1 rounded transition-colors cursor-pointer" title="[Esc]">Clear Screen</button>
+            <button onClick={clearProjection} className="text-xs bg-slate-700 hover:bg-red-600 text-white px-3 py-1 rounded transition-colors cursor-pointer" title="[Esc]">Clear</button>
         </div>
 
         <div className="flex-1 bg-slate-900 p-6 overflow-y-auto space-y-4">

@@ -3,7 +3,7 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 const ProjectionContext = createContext();
 
 export const ProjectionProvider = ({ children }) => {
-  // 1. Load Saved State (Scripture & Font Size)
+  // 1. Load Saved State
   const [liveScripture, setLiveScripture] = useState(() => {
     const saved = localStorage.getItem('current_scripture');
     return saved ? JSON.parse(saved) : null;
@@ -11,7 +11,13 @@ export const ProjectionProvider = ({ children }) => {
 
   const [fontSize, setFontSize] = useState(() => {
     const saved = localStorage.getItem('projection_font_size');
-    return saved ? parseInt(saved) : 60; // Default 60px
+    return saved ? parseInt(saved) : 60;
+  });
+
+  // NEW: Theme State (Background & Text Color)
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem('projection_theme');
+    return saved ? JSON.parse(saved) : { backgroundColor: '#00b140', textColor: '#ffffff' };
   });
 
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -66,9 +72,12 @@ export const ProjectionProvider = ({ children }) => {
         setLiveScripture(null);
         localStorage.removeItem('current_scripture');
       } else if (type === 'UPDATE_STYLE') {
-        // NEW: Listen for style changes
         setFontSize(payload.fontSize);
         localStorage.setItem('projection_font_size', payload.fontSize);
+      } else if (type === 'UPDATE_THEME') {
+        // NEW: Handle Theme Updates
+        setTheme(payload.theme);
+        localStorage.setItem('projection_theme', JSON.stringify(payload.theme));
       }
     };
     return () => channel.close();
@@ -115,12 +124,21 @@ export const ProjectionProvider = ({ children }) => {
     channel.close();
   };
 
-  // NEW: Action to update Font Size
   const updateFontSize = (newSize) => {
     setFontSize(newSize);
     localStorage.setItem('projection_font_size', newSize);
     const channel = new BroadcastChannel(channelName);
     channel.postMessage({ type: 'UPDATE_STYLE', payload: { fontSize: newSize } });
+    channel.close();
+  };
+
+  // NEW: Update Theme Action
+  const updateTheme = (key, value) => {
+    const newTheme = { ...theme, [key]: value };
+    setTheme(newTheme);
+    localStorage.setItem('projection_theme', JSON.stringify(newTheme));
+    const channel = new BroadcastChannel(channelName);
+    channel.postMessage({ type: 'UPDATE_THEME', payload: { theme: newTheme } });
     channel.close();
   };
 
@@ -133,8 +151,10 @@ export const ProjectionProvider = ({ children }) => {
         prevSlide,
         currentSlideIndex,
         totalSlides: slides.length,
-        fontSize,         // Export State
-        updateFontSize    // Export Action
+        fontSize,
+        updateFontSize,
+        theme,          // Export Theme
+        updateTheme     // Export Action
     }}>
       {children}
     </ProjectionContext.Provider>

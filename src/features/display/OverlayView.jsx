@@ -2,10 +2,15 @@ import React from 'react';
 import { useProjection } from '../../context/ProjectionContext';
 
 const OverlayView = () => {
-  const { liveScripture, fontSize } = useProjection(); // Get fontSize
+  // 1. Get Theme from Context
+  const { liveScripture, fontSize, theme } = useProjection();
 
   return (
-    <div className="min-h-screen w-full flex flex-col justify-end p-12 pb-20 bg-[#00b140]">
+    // 2. Apply Dynamic Background Color
+    <div
+        className="min-h-screen w-full flex flex-col justify-end p-12 pb-20 transition-colors duration-300"
+        style={{ backgroundColor: theme.backgroundColor }}
+    >
 
       {!liveScripture ? (
         <div className="absolute top-0 left-0 p-4 text-white/50 font-mono text-sm">
@@ -18,11 +23,14 @@ const OverlayView = () => {
             {liveScripture.reference}
           </div>
 
-          {/* Verse Body with Dynamic Font Size */}
-          <div className="bg-slate-900/95 text-white p-8 rounded-b-xl rounded-tr-xl shadow-2xl border border-slate-700">
+          {/* Verse Body */}
+          <div className="bg-slate-900/95 p-8 rounded-b-xl rounded-tr-xl shadow-2xl border border-slate-700">
             <p
                 className="font-serif leading-snug drop-shadow-md transition-all duration-300 ease-out"
-                style={{ fontSize: `${fontSize}px` }} // DYNAMIC STYLE
+                style={{
+                    fontSize: `${fontSize}px`,
+                    color: theme.textColor // 3. Apply Dynamic Text Color
+                }}
             >
               {liveScripture.text}
             </p>

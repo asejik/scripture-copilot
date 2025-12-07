@@ -1,0 +1,23 @@
+# Project Context
+You are building a Real-Time Scripture Assistant web app using React (Vite), Tailwind CSS v4, and the Web Speech API.
+
+# Tech Stack & Best Practices
+- **Framework:** React 18+ (Vite)
+- **Language:** JavaScript (ES6+)
+- **Styling:** Tailwind CSS v4 (CSS-first configuration, no tailwind.config.js)
+- **State Management:** React Hooks (useState, useEffect, useContext)
+- **routing:** None (Single Page Application)
+
+# Coding Rules
+- **Functional Components:** Use arrow functions `const Component = () => {}`.
+- **Tailwind v4:** Use the new `@import "tailwindcss";` syntax. Do not ask for `tailwind.config.js`.
+- **Clean Code:** Keep components small. Split logic (hooks) from UI (JSX).
+- **Performance:** Memoize expensive calculations. Use `useCallback` for functions passed as props.
+- **Security:** NEVER hardcode API keys. Use `import.meta.env`.
+- **Comments:** Add JSDoc comments for complex logic only.
+
+# File Structure
+- /src/components: Reusable UI elements (Buttons, Cards).
+- /src/features: Major feature blocks (AudioListener, ScriptureDisplay).
+- /src/hooks: Custom React hooks (useSpeechRecognition).
+- /src/utils: Helper functions (Regex parsers).

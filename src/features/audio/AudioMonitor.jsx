@@ -14,7 +14,6 @@ import nltData from '../../data/nlt.json';
 import gwData from '../../data/gw.json';
 
 const AudioMonitor = () => {
-  // Persistence
   const [version, setVersion] = useState(() => localStorage.getItem('bible_version') || 'KJV');
 
   const [manualInput, setManualInput] = useState('');
@@ -79,7 +78,6 @@ const AudioMonitor = () => {
   // --- SHORTCUTS ---
   useEffect(() => {
     const handleKeyDown = (e) => {
-        // Allow typing in textareas and inputs
         if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && e.key !== 'Escape' && e.key !== 'Enter') return;
 
         switch(e.key) {
@@ -97,8 +95,6 @@ const AudioMonitor = () => {
                 prevSlide();
                 break;
             case 'Enter':
-                // Only trigger if holding Shift (for new lines) or just Enter (to submit)
-                // Let's make ENTER project, and Shift+Enter add new line
                 if (previewScripture && !e.shiftKey) {
                     e.preventDefault();
                     confirmProjection();
@@ -161,11 +157,13 @@ const AudioMonitor = () => {
     document.body.removeChild(element);
   };
 
-  // NEW: Handle editing the preview text
+  // --- THE FIX IS HERE ---
   const handlePreviewEdit = (e) => {
     setPreviewScripture(prev => ({
         ...prev,
-        text: e.target.value
+        text: e.target.value,
+        // CRITICAL FIX: Clear the strict verse list so the system uses the new text
+        verseList: null
     }));
   };
 
@@ -233,7 +231,6 @@ const AudioMonitor = () => {
                         </div>
                     </div>
 
-                    {/* NEW: EDITABLE TEXTAREA */}
                     <textarea
                         value={previewScripture.text}
                         onChange={handlePreviewEdit}

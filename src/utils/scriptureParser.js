@@ -20,23 +20,32 @@ export const parseScripture = (text, bibleData, versionName) => {
       // 1. Resolve Alias
       let realBookKey = BOOK_ALIASES[spokenBook];
 
-      // 2. Fallback Logic for JSON Mismatch
+      // 2. PRIMARY CHECK: Direct Lookup
+      // If direct lookup fails, we try to "find" the key in the JSON keys
       if (realBookKey && !bibleData[realBookKey]) {
-         // Check specific tricky books
-         if (realBookKey === "Psalms" && bibleData["Psalm"]) realBookKey = "Psalm";
+         const jsonKeys = Object.keys(bibleData);
 
-         // CRITICAL FIX: Check ALL variations for Song of Solomon
-         else if (realBookKey === "Song of Solomon") {
-             if (bibleData["Song of Solomon"]) realBookKey = "Song of Solomon";
-             else if (bibleData["Song of Songs"]) realBookKey = "Song of Songs"; // NIV Style
-             else if (bibleData["Songs of Solomon"]) realBookKey = "Songs of Solomon"; // Plural Style
-             else if (bibleData["Canticles"]) realBookKey = "Canticles";
+         // A. Case Insensitive Match (e.g. "song of solomon" vs "Song of Solomon")
+         let foundKey = jsonKeys.find(k => k.toLowerCase() === realBookKey.toLowerCase());
+
+         // B. "Song" Specific Fallback (If 'Song of Solomon' fails, try 'Song of Songs')
+         if (!foundKey && (realBookKey.includes("Song") || realBookKey.includes("Solomon"))) {
+             foundKey = jsonKeys.find(k =>
+                 k.includes("Song") || k.includes("Solomon") || k.includes("Canticles")
+             );
          }
 
-         else if (realBookKey === "Revelation" && bibleData["Revelations"]) realBookKey = "Revelations";
+         // C. "Psalm" Specific Fallback
+         if (!foundKey && (realBookKey.includes("Psalm"))) {
+             foundKey = jsonKeys.find(k => k.startsWith("Psalm"));
+         }
+
+         if (foundKey) {
+             realBookKey = foundKey;
+         }
       }
 
-      // 3. Final Check
+      // 3. Final Validation
       if (!realBookKey || !bibleData[realBookKey]) continue;
 
       const bookData = bibleData[realBookKey];

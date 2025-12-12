@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { normalizeSpokenText } from '../utils/textNormalizer';
 import { parseScripture } from '../utils/scriptureParser';
 
@@ -6,6 +6,7 @@ const useScriptureDetection = (transcript, bibleData, version) => {
   const [detectedScripture, setDetectedScripture] = useState(null);
   const [history, setHistory] = useState([]);
 
+  // Voice Detection Logic
   useEffect(() => {
     if (!transcript || !bibleData) return;
 
@@ -18,9 +19,8 @@ const useScriptureDetection = (transcript, bibleData, version) => {
         const isNewText = prev?.text !== result.text;
 
         if (isNewReference || isNewText) {
-            // Add to history if it's a new reference
             if (isNewReference) {
-                // Keep history unlimited or cap at 50 for the session
+                // Add to history automatically for voice
                 setHistory(h => [result, ...h].slice(0, 50));
             }
             return result;
@@ -30,14 +30,23 @@ const useScriptureDetection = (transcript, bibleData, version) => {
     }
   }, [transcript, bibleData, version]);
 
-  // NEW: Function to manually clear history
-  const clearHistory = () => {
+  const clearHistory = useCallback(() => {
     setHistory([]);
     setDetectedScripture(null);
-  };
+  }, []);
 
-  // Return the new function
-  return { detectedScripture, history, clearHistory };
+  // NEW: Manual Add to History
+  const addToHistory = useCallback((item) => {
+    setHistory(h => {
+        // Prevent exact duplicates at the top of the list
+        if (h.length > 0 && h[0].reference === item.reference && h[0].version === item.version) {
+            return h;
+        }
+        return [item, ...h].slice(0, 50);
+    });
+  }, []);
+
+  return { detectedScripture, history, clearHistory, addToHistory };
 };
 
 export default useScriptureDetection;

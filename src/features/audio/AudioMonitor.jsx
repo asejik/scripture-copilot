@@ -15,7 +15,6 @@ import gwData from '../../data/gw.json';
 
 const AudioMonitor = () => {
   const [version, setVersion] = useState(() => localStorage.getItem('bible_version') || 'KJV');
-
   const [manualInput, setManualInput] = useState('');
   const [searchError, setSearchError] = useState(null);
   const [previewScripture, setPreviewScripture] = useState(null);
@@ -65,8 +64,10 @@ const AudioMonitor = () => {
     liveScripture,
     fontSize,
     updateFontSize,
-    theme,         // Get Theme
-    updateTheme    // Get Updater
+    theme,
+    updateTheme,
+    layoutMode,      // Get Mode
+    updateLayoutMode // Get Updater
   } = useProjection();
 
   const bottomRef = useRef(null);
@@ -77,18 +78,14 @@ const AudioMonitor = () => {
     }
   }, [transcript, interimTranscript]);
 
-  // --- SHORTCUTS ---
   useEffect(() => {
     const handleKeyDown = (e) => {
         if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && e.key !== 'Escape' && e.key !== 'Enter') return;
 
         switch(e.key) {
             case 'Escape':
-                if (previewScripture) {
-                    setPreviewScripture(null);
-                } else {
-                    clearProjection();
-                }
+                if (previewScripture) setPreviewScripture(null);
+                else clearProjection();
                 break;
             case 'ArrowRight':
                 nextSlide();
@@ -103,15 +100,11 @@ const AudioMonitor = () => {
                 }
                 break;
             case 'p':
-                if (e.altKey && detectedScripture) {
-                    projectScripture(detectedScripture);
-                }
+                if (e.altKey && detectedScripture) projectScripture(detectedScripture);
                 break;
-            default:
-                break;
+            default: break;
         }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [previewScripture, detectedScripture, nextSlide, prevSlide, clearProjection, projectScripture]);
@@ -121,17 +114,11 @@ const AudioMonitor = () => {
     e.preventDefault();
     setSearchError(null);
     setPreviewScripture(null);
-
     if (!manualInput.trim()) return;
-
     const cleanText = normalizeSpokenText(manualInput);
     const result = parseScripture(cleanText, currentBibleData, version);
-
-    if (result) {
-        setPreviewScripture(result);
-    } else {
-        setSearchError(`Scripture not found in ${version}. Check spelling.`);
-    }
+    if (result) setPreviewScripture(result);
+    else setSearchError(`Scripture not found in ${version}. Check spelling.`);
   };
 
   const confirmProjection = () => {
@@ -160,11 +147,7 @@ const AudioMonitor = () => {
   };
 
   const handlePreviewEdit = (e) => {
-    setPreviewScripture(prev => ({
-        ...prev,
-        text: e.target.value,
-        verseList: null
-    }));
+    setPreviewScripture(prev => ({ ...prev, text: e.target.value, verseList: null }));
   };
 
   return (
@@ -172,9 +155,9 @@ const AudioMonitor = () => {
 
       {/* LEFT COLUMN */}
       <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-[600px]">
+        {/* ... (Left Header & Body - No Changes) ... */}
         <div className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center">
             <h2 className="text-slate-200 font-semibold flex items-center gap-2">🎙️ Live Audio</h2>
-
             <div className="flex items-center gap-3">
               <select
                 value={version}
@@ -189,7 +172,6 @@ const AudioMonitor = () => {
                 <option value="NLT">NLT</option>
                 <option value="GW">GW</option>
               </select>
-
               <div className="flex items-center gap-2">
                   <div className={`h-2 w-2 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
                   <span className="text-xs text-slate-400 w-12">{isListening ? 'ON AIR' : 'OFF'}</span>
@@ -209,35 +191,18 @@ const AudioMonitor = () => {
                 <button onClick={isListening ? stopListening : startListening} className={`px-4 py-2 rounded-lg font-medium text-white transition-colors cursor-pointer flex-1 ${isListening ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>{isListening ? 'Stop Mic' : 'Start Mic'}</button>
                 <button onClick={resetTranscript} className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 cursor-pointer">Clear Text</button>
             </div>
-
             <form onSubmit={handleManualSearch} className="flex gap-2 relative">
-                <input
-                    type="text"
-                    value={manualInput}
-                    onChange={(e) => setManualInput(e.target.value)}
-                    placeholder="Type reference (e.g. John 3:16)..."
-                    className="flex-1 bg-slate-950 text-white border border-slate-600 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-500"
-                />
+                <input type="text" value={manualInput} onChange={(e) => setManualInput(e.target.value)} placeholder="Type reference (e.g. John 3:16)..." className="flex-1 bg-slate-950 text-white border border-slate-600 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-500" />
                 <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm cursor-pointer">Search</button>
             </form>
             {searchError && <div className="text-red-400 text-xs text-center">{searchError}</div>}
-
             {previewScripture && (
                 <div className="mt-2 bg-slate-700/50 border border-slate-600 rounded-lg p-3 animate-in fade-in slide-in-from-top-2 border-l-4 border-l-blue-500">
                     <div className="flex justify-between items-start mb-2">
                         <span className="text-blue-300 font-bold text-sm">{previewScripture.reference} ({previewScripture.version})</span>
-                        <div className="flex gap-2 text-[10px] text-slate-400">
-                           <span>Edit text below if needed</span>
-                        </div>
+                        <div className="flex gap-2 text-[10px] text-slate-400"><span>Edit text below if needed</span></div>
                     </div>
-
-                    <textarea
-                        value={previewScripture.text}
-                        onChange={handlePreviewEdit}
-                        className="w-full bg-slate-800 text-slate-200 text-sm p-2 rounded border border-slate-600 focus:border-blue-500 focus:outline-none mb-2 font-serif"
-                        rows={3}
-                    />
-
+                    <textarea value={previewScripture.text} onChange={handlePreviewEdit} className="w-full bg-slate-800 text-slate-200 text-sm p-2 rounded border border-slate-600 focus:border-blue-500 focus:outline-none mb-2 font-serif" rows={3} />
                     <div className="flex gap-2">
                         <button onClick={() => setPreviewScripture(null)} className="px-3 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded text-sm transition-colors cursor-pointer">Cancel</button>
                         <button onClick={confirmProjection} className="flex-1 bg-green-600 hover:bg-green-500 text-white py-2 rounded font-bold text-sm shadow transition-colors cursor-pointer">✔ Confirm & Project</button>
@@ -247,41 +212,43 @@ const AudioMonitor = () => {
         </div>
       </div>
 
-      {/* RIGHT COLUMN */}
+      {/* RIGHT COLUMN: STYLING & LAYOUT */}
       <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-[600px]">
-        <div className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center">
-            <h2 className="text-purple-400 font-semibold flex items-center gap-2">✨ Detected Scriptures</h2>
+        <div className="bg-slate-800 p-4 border-b border-slate-700 flex flex-col gap-3">
+            <div className="flex justify-between items-center">
+                <h2 className="text-purple-400 font-semibold flex items-center gap-2">✨ Detected Scriptures</h2>
+                <button onClick={clearProjection} className="text-xs bg-slate-700 hover:bg-red-600 text-white px-3 py-1 rounded transition-colors cursor-pointer" title="[Esc]">Clear</button>
+            </div>
 
-            {/* STYLING CONTROLS */}
-            <div className="flex items-center gap-3">
-                {/* 1. Font Slider */}
-                <div className="flex items-center gap-1 bg-slate-900 px-2 py-1 rounded border border-slate-600" title="Font Size">
+            {/* NEW: LAYOUT & STYLE CONTROLS ROW */}
+            <div className="flex flex-wrap items-center gap-2 text-sm bg-slate-950 p-2 rounded border border-slate-800">
+                {/* 1. View Mode Dropdown */}
+                <select
+                    value={layoutMode}
+                    onChange={(e) => updateLayoutMode(e.target.value)}
+                    className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"
+                    title="Change Projector Layout"
+                >
+                    <option value="LOWER_THIRD">Lower Third (Live)</option>
+                    <option value="CENTER">Center Screen (Stage)</option>
+                </select>
+
+                <div className="w-px h-4 bg-slate-700 mx-1"></div>
+
+                {/* 2. Font Size */}
+                <div className="flex items-center gap-1" title="Font Size">
                     <span className="text-xs text-slate-400">Aa</span>
                     <input type="range" min="30" max="120" value={fontSize} onChange={(e) => updateFontSize(parseInt(e.target.value))} className="w-16 accent-purple-500 cursor-pointer" />
                 </div>
 
-                {/* 2. Color Pickers (Theme) */}
-                <div className="flex items-center gap-1 bg-slate-900 px-2 py-1 rounded border border-slate-600">
-                    {/* Background Color */}
-                    <input
-                        type="color"
-                        value={theme.backgroundColor}
-                        onChange={(e) => updateTheme('backgroundColor', e.target.value)}
-                        className="w-6 h-6 rounded cursor-pointer border-none p-0 bg-transparent"
-                        title="Background Color (Green Screen)"
-                    />
-                    {/* Text Color */}
-                    <input
-                        type="color"
-                        value={theme.textColor}
-                        onChange={(e) => updateTheme('textColor', e.target.value)}
-                        className="w-6 h-6 rounded cursor-pointer border-none p-0 bg-transparent"
-                        title="Text Color"
-                    />
+                <div className="w-px h-4 bg-slate-700 mx-1"></div>
+
+                {/* 3. Colors */}
+                <div className="flex items-center gap-1">
+                    <input type="color" value={theme.backgroundColor} onChange={(e) => updateTheme('backgroundColor', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none p-0 bg-transparent" title="Background Color" />
+                    <input type="color" value={theme.textColor} onChange={(e) => updateTheme('textColor', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none p-0 bg-transparent" title="Text Color" />
                 </div>
             </div>
-
-            <button onClick={clearProjection} className="text-xs bg-slate-700 hover:bg-red-600 text-white px-3 py-1 rounded transition-colors cursor-pointer" title="[Esc]">Clear</button>
         </div>
 
         <div className="flex-1 bg-slate-900 p-6 overflow-y-auto space-y-4">

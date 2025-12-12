@@ -14,7 +14,11 @@ export const ProjectionProvider = ({ children }) => {
     return saved ? parseInt(saved) : 60;
   });
 
-  // NEW: Theme State (Background & Text Color)
+  // NEW: Layout Mode (LOWER_THIRD or CENTER)
+  const [layoutMode, setLayoutMode] = useState(() => {
+    return localStorage.getItem('projection_layout_mode') || 'LOWER_THIRD';
+  });
+
   const [theme, setTheme] = useState(() => {
     const saved = localStorage.getItem('projection_theme');
     return saved ? JSON.parse(saved) : { backgroundColor: '#00b140', textColor: '#ffffff' };
@@ -25,7 +29,6 @@ export const ProjectionProvider = ({ children }) => {
 
   const channelName = 'scripture_copilot';
 
-  // Helper: Chunk verses
   const createSlides = (scripture) => {
     if (!scripture.verseList) {
         let ref = scripture.reference;
@@ -75,9 +78,12 @@ export const ProjectionProvider = ({ children }) => {
         setFontSize(payload.fontSize);
         localStorage.setItem('projection_font_size', payload.fontSize);
       } else if (type === 'UPDATE_THEME') {
-        // NEW: Handle Theme Updates
         setTheme(payload.theme);
         localStorage.setItem('projection_theme', JSON.stringify(payload.theme));
+      } else if (type === 'UPDATE_LAYOUT') {
+        // NEW: Handle Layout Updates
+        setLayoutMode(payload.layoutMode);
+        localStorage.setItem('projection_layout_mode', payload.layoutMode);
       }
     };
     return () => channel.close();
@@ -132,7 +138,6 @@ export const ProjectionProvider = ({ children }) => {
     channel.close();
   };
 
-  // NEW: Update Theme Action
   const updateTheme = (key, value) => {
     const newTheme = { ...theme, [key]: value };
     setTheme(newTheme);
@@ -142,19 +147,20 @@ export const ProjectionProvider = ({ children }) => {
     channel.close();
   };
 
+  // NEW: Update Layout Action
+  const updateLayoutMode = (mode) => {
+    setLayoutMode(mode);
+    localStorage.setItem('projection_layout_mode', mode);
+    const channel = new BroadcastChannel(channelName);
+    channel.postMessage({ type: 'UPDATE_LAYOUT', payload: { layoutMode: mode } });
+    channel.close();
+  };
+
   return (
     <ProjectionContext.Provider value={{
-        liveScripture,
-        projectScripture,
-        clearProjection,
-        nextSlide,
-        prevSlide,
-        currentSlideIndex,
-        totalSlides: slides.length,
-        fontSize,
-        updateFontSize,
-        theme,          // Export Theme
-        updateTheme     // Export Action
+        liveScripture, projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex, totalSlides,
+        fontSize, updateFontSize, theme, updateTheme,
+        layoutMode, updateLayoutMode // Export Layout
     }}>
       {children}
     </ProjectionContext.Provider>

@@ -3,21 +3,29 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate', // Automatically update when you push new code
+      registerType: 'autoUpdate',
+      devOptions: {
+        enabled: true
+      },
+      workbox: {
+        // FIX: Increase cache limit to 50MB to handle Bible JSON files
+        maximumFileSizeToCacheInBytes: 50 * 1024 * 1024,
+        // Ensure we cache all assets including JSONs if they are external
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,json}']
+      },
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
         name: 'Scripture Copilot',
         short_name: 'Copilot',
         description: 'AI-Powered Church Presentation Assistant',
-        theme_color: '#0f172a', // Matches your slate-900 background
+        theme_color: '#0f172a',
         background_color: '#0f172a',
-        display: 'standalone', // Hides the browser address bar
+        display: 'standalone',
         orientation: 'landscape',
         icons: [
           {

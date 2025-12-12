@@ -19,7 +19,15 @@ const AudioMonitor = () => {
   const [searchError, setSearchError] = useState(null);
   const [previewScripture, setPreviewScripture] = useState(null);
 
+  // --- NEW: FAVORITES STATE ---
+  const [favorites, setFavorites] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('saved_favorites')) || []; } catch (e) { return []; }
+  });
+
   useEffect(() => { localStorage.setItem('bible_version', version); }, [version]);
+
+  // Save favorites whenever they change
+  useEffect(() => { localStorage.setItem('saved_favorites', JSON.stringify(favorites)); }, [favorites]);
 
   const getBibleData = () => {
     switch(version) {
@@ -40,11 +48,12 @@ const AudioMonitor = () => {
   const {
     projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex, totalSlides, liveScripture,
     fontSize, updateFontSize, theme, updateTheme, layoutMode, updateLayoutMode, textAlign, updateTextAlign,
-    aspectRatio, updateAspectRatio // Get Aspect Ratio
+    aspectRatio, updateAspectRatio
   } = useProjection();
 
   const bottomRef = useRef(null);
   useEffect(() => { if (bottomRef.current) bottomRef.current.scrollIntoView({ behavior: 'smooth' }); }, [transcript, interimTranscript]);
+
   useEffect(() => {
     const handleKeyDown = (e) => {
         if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && e.key !== 'Escape' && e.key !== 'Enter') return;
@@ -69,6 +78,7 @@ const AudioMonitor = () => {
     if (result) setPreviewScripture(result); else setSearchError(`Scripture not found in ${version}. Check spelling.`);
   };
   const confirmProjection = () => { if (previewScripture) { projectScripture(previewScripture); setPreviewScripture(null); setManualInput(''); }};
+
   const exportHistory = () => {
     if (history.length === 0) return;
     const date = new Date().toLocaleDateString(); let content = `SERMON SCRIPTURE NOTES - ${date}\n\n`;
@@ -77,13 +87,31 @@ const AudioMonitor = () => {
     element.href = URL.createObjectURL(file); element.download = `sermon-notes-${Date.now()}.txt`;
     document.body.appendChild(element); element.click(); document.body.removeChild(element);
   };
+
   const handlePreviewEdit = (e) => { setPreviewScripture(prev => ({ ...prev, text: e.target.value, verseList: null })); };
 
+  // --- NEW: FAVORITES LOGIC ---
+  const toggleFavorite = (scripture) => {
+    const exists = favorites.find(f => f.reference === scripture.reference && f.version === scripture.version);
+    if (exists) {
+        setFavorites(prev => prev.filter(f => !(f.reference === scripture.reference && f.version === scripture.version)));
+    } else {
+        setFavorites(prev => [scripture, ...prev]);
+    }
+  };
+
+  const isFavorited = (scripture) => {
+    if (!scripture) return false;
+    return favorites.some(f => f.reference === scripture.reference && f.version === scripture.version);
+  };
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-6xl mx-auto">
-      {/* LEFT COLUMN */}
-      <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-[600px]">
-        <div className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-6xl mx-auto h-[calc(100vh-4rem)]">
+
+      {/* LEFT COLUMN: Controls & Favorites */}
+      <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-full">
+        {/* Header */}
+        <div className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center shrink-0">
             <h2 className="text-slate-200 font-semibold flex items-center gap-2">🎙️ Live Audio</h2>
             <div className="flex items-center gap-3">
               <select value={version} onChange={(e) => setVersion(e.target.value)} className="bg-slate-900 text-white text-sm font-bold py-1 px-3 rounded border border-slate-600 focus:outline-none focus:border-purple-500 transition-colors">
@@ -92,19 +120,25 @@ const AudioMonitor = () => {
               <div className="flex items-center gap-2"><div className={`h-2 w-2 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} /><span className="text-xs text-slate-400 w-12">{isListening ? 'ON AIR' : 'OFF'}</span></div>
             </div>
         </div>
-        <div className="flex-1 bg-slate-950 p-6 overflow-y-auto font-mono text-sm leading-relaxed">
+
+        {/* Transcript (Flexible Height) */}
+        <div className="flex-1 bg-slate-950 p-6 overflow-y-auto font-mono text-sm leading-relaxed min-h-[150px]">
             {error && <div className="text-red-400 mb-2">{error}</div>} <span className="text-slate-300">{transcript}</span> <span className="text-emerald-400 italic"> {interimTranscript}</span> <div ref={bottomRef} />
         </div>
-        <div className="p-4 bg-slate-800 border-t border-slate-700 flex flex-col gap-3">
+
+        {/* Bottom Section: Controls + Manual Search + Favorites */}
+        <div className="p-4 bg-slate-800 border-t border-slate-700 flex flex-col gap-3 shrink-0">
             <div className="flex gap-3">
                 <button onClick={isListening ? stopListening : startListening} className={`px-4 py-2 rounded-lg font-medium text-white transition-colors cursor-pointer flex-1 ${isListening ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>{isListening ? 'Stop Mic' : 'Start Mic'}</button>
                 <button onClick={resetTranscript} className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 cursor-pointer">Clear Text</button>
             </div>
+
             <form onSubmit={handleManualSearch} className="flex gap-2 relative">
                 <input type="text" value={manualInput} onChange={(e) => setManualInput(e.target.value)} placeholder="Type reference (e.g. John 3:16)..." className="flex-1 bg-slate-950 text-white border border-slate-600 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-500" />
                 <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm cursor-pointer">Search</button>
             </form>
             {searchError && <div className="text-red-400 text-xs text-center">{searchError}</div>}
+
             {previewScripture && (
                 <div className="mt-2 bg-slate-700/50 border border-slate-600 rounded-lg p-3 animate-in fade-in slide-in-from-top-2 border-l-4 border-l-blue-500">
                     <div className="flex justify-between items-start mb-2">
@@ -118,48 +152,61 @@ const AudioMonitor = () => {
                     </div>
                 </div>
             )}
+
+            {/* --- FAVORITES LIST --- */}
+            {favorites.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-slate-700">
+                    <h4 className="text-xs text-slate-400 uppercase font-bold mb-2">⭐ Quick Access / Favorites</h4>
+                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
+                        {favorites.map((fav, idx) => (
+                            <div key={idx} className="shrink-0 relative group">
+                                <button
+                                    onClick={() => projectScripture(fav)}
+                                    className="bg-purple-900/40 hover:bg-purple-800 border border-purple-500/30 text-purple-200 text-xs px-3 py-2 rounded-lg flex flex-col items-center min-w-[80px] cursor-pointer"
+                                >
+                                    <span className="font-bold">{fav.reference}</span>
+                                    <span className="opacity-50 text-[10px]">{fav.version}</span>
+                                </button>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); toggleFavorite(fav); }}
+                                    className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                    title="Remove"
+                                >
+                                    ×
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
       </div>
 
       {/* RIGHT COLUMN */}
-      <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-[600px]">
-        <div className="bg-slate-800 p-4 border-b border-slate-700 flex flex-col gap-3">
+      <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-full">
+        <div className="bg-slate-800 p-4 border-b border-slate-700 flex flex-col gap-3 shrink-0">
             <div className="flex justify-between items-center">
                 <h2 className="text-purple-400 font-semibold flex items-center gap-2">✨ Detected Scriptures</h2>
                 <button onClick={clearProjection} className="text-xs bg-slate-700 hover:bg-red-600 text-white px-3 py-1 rounded transition-colors cursor-pointer" title="[Esc]">Clear</button>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 text-sm bg-slate-950 p-2 rounded border border-slate-800">
-                {/* 1. View Mode */}
                 <select value={layoutMode} onChange={(e) => updateLayoutMode(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none">
-                    <option value="LOWER_THIRD">Lower Third</option>
-                    <option value="CENTER">Center</option>
+                    <option value="LOWER_THIRD">Lower Third</option><option value="CENTER">Center</option>
                 </select>
-
-                {/* 2. Aspect Ratio Selector (NEW) */}
                 <select value={aspectRatio} onChange={(e) => updateAspectRatio(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none">
-                    <option value="16:9">16:9</option>
-                    <option value="12:5">12:5 (Ultra)</option>
+                    <option value="16:9">16:9</option><option value="12:5">12:5 (Ultra)</option>
                 </select>
-
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
-
-                {/* 3. Alignment */}
                 <select value={textAlign} onChange={(e) => updateTextAlign(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none">
                     <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justify</option>
                 </select>
-
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
-
-                {/* 4. Font Size */}
                 <div className="flex items-center gap-1" title="Font Size">
                     <span className="text-xs text-slate-400">Aa</span>
                     <input type="range" min="30" max="120" value={fontSize} onChange={(e) => updateFontSize(parseInt(e.target.value))} className="w-16 accent-purple-500 cursor-pointer" />
                 </div>
-
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
-
-                {/* 5. Colors */}
                 <div className="flex items-center gap-1">
                     <input type="color" value={theme.backgroundColor} onChange={(e) => updateTheme('backgroundColor', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none p-0 bg-transparent" title="Background" />
                     <input type="color" value={theme.textColor} onChange={(e) => updateTheme('textColor', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none p-0 bg-transparent" title="Text" />
@@ -171,7 +218,17 @@ const AudioMonitor = () => {
             {detectedScripture ? (
                 <div className="bg-purple-900/20 border border-purple-500/50 p-6 rounded-xl animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
                     <div className="flex justify-between items-start mb-4">
-                        <h3 className="text-2xl font-bold text-white">{detectedScripture.reference} <span className="text-sm font-normal text-purple-300">({detectedScripture.version})</span></h3>
+                        <div className="flex items-center gap-2">
+                            <h3 className="text-2xl font-bold text-white">{detectedScripture.reference} <span className="text-sm font-normal text-purple-300">({detectedScripture.version})</span></h3>
+                            {/* --- STAR BUTTON --- */}
+                            <button
+                                onClick={() => toggleFavorite(detectedScripture)}
+                                className={`text-xl hover:scale-110 transition-transform ${isFavorited(detectedScripture) ? 'text-yellow-400' : 'text-slate-600 hover:text-yellow-200'}`}
+                                title={isFavorited(detectedScripture) ? "Remove from Favorites" : "Add to Favorites"}
+                            >
+                                ★
+                            </button>
+                        </div>
                         <button onClick={() => projectScripture(detectedScripture)} className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer" title="[Alt + P]">PROJECT 📺</button>
                     </div>
                     <p className="text-purple-200 text-lg leading-relaxed font-serif max-h-40 overflow-y-auto mb-4">"{detectedScripture.text}"</p>
@@ -208,4 +265,5 @@ const AudioMonitor = () => {
     </div>
   );
 };
+
 export default AudioMonitor;

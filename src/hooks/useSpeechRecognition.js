@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 const useSpeechRecognition = () => {
   const [isListening, setIsListening] = useState(false);
@@ -6,24 +6,21 @@ const useSpeechRecognition = () => {
   const [interimTranscript, setInterimTranscript] = useState('');
   const [error, setError] = useState(null);
 
-  // Use a ref to store the recognition instance so it persists across renders
   const recognitionRef = useRef(null);
 
   useEffect(() => {
-    // Check for browser support
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      setError('Browser does not support Speech Recognition. Please use Chrome or Edge.');
+      setError('Browser does not support Speech Recognition. Use Chrome/Edge.');
       return;
     }
 
     const recognition = new SpeechRecognition();
-    recognition.continuous = true; // Keep listening even after pauses
-    recognition.interimResults = true; // Show results while speaking
-    recognition.lang = 'en-US'; // Default to English
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
 
-    // Event Handler: On Result
     recognition.onresult = (event) => {
       let finalTrans = '';
       let interimTrans = '';
@@ -36,28 +33,22 @@ const useSpeechRecognition = () => {
         }
       }
 
-      // Append final transcript to existing state
       if (finalTrans) {
-        setTranscript((prev) => {
-          // Keep only the last 500 characters to prevent memory issues during long services
-          const newText = prev + ' ' + finalTrans;
-          return newText.slice(-500);
-        });
+        setTranscript((prev) => (prev + ' ' + finalTrans).slice(-1000));
       }
       setInterimTranscript(interimTrans);
     };
 
-    // Event Handler: On Error
     recognition.onerror = (event) => {
-      console.error('Speech recognition error', event.error);
-      setError(`Error: ${event.error}`);
-      setIsListening(false);
+      // Ignore "no-speech" errors as they are common
+      if (event.error !== 'no-speech') {
+          console.error('Speech recognition error', event.error);
+          setError(`Error: ${event.error}`);
+          setIsListening(false);
+      }
     };
 
-    // Event Handler: On End
     recognition.onend = () => {
-      // If we intended to be listening, this means it stopped unexpectedly (silence/network)
-      // For MVP, we just update state. In Polish phase, we add auto-restart logic here.
       setIsListening(false);
     };
 
@@ -71,7 +62,7 @@ const useSpeechRecognition = () => {
         setIsListening(true);
         setError(null);
       } catch (err) {
-        console.error('Failed to start:', err);
+        console.error(err);
       }
     }
   }, [isListening]);
@@ -83,9 +74,12 @@ const useSpeechRecognition = () => {
     }
   }, [isListening]);
 
+  // FIX: Force clear local state
   const resetTranscript = useCallback(() => {
     setTranscript('');
     setInterimTranscript('');
+    // Note: We cannot "clear" the browser's internal speech buffer,
+    // but clearing the React state removes it from the UI.
   }, []);
 
   return {

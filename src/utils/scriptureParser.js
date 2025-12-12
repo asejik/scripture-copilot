@@ -2,7 +2,6 @@ import { BOOK_ALIASES } from './bookMapping';
 
 const MAX_VERSES_LIMIT = 50;
 
-// NEW: Accepts 'versionName' as the third argument
 export const parseScripture = (text, bibleData, versionName) => {
   try {
     if (!text || !bibleData) return null;
@@ -18,7 +17,16 @@ export const parseScripture = (text, bibleData, versionName) => {
       let spokenBook = numberPrefix ? `${numberPrefix.trim()} ${bookName}` : bookName;
       spokenBook = spokenBook.trim().toLowerCase();
 
-      const realBookKey = BOOK_ALIASES[spokenBook];
+      // 1. Resolve Alias (e.g., "psalm" -> "Psalms")
+      let realBookKey = BOOK_ALIASES[spokenBook];
+
+      // 2. Fallback Logic for JSON Mismatch (The Fix)
+      // If "Psalms" isn't in the JSON, try "Psalm". If "Song of Solomon" fails, try "Song of Songs".
+      if (!bibleData[realBookKey]) {
+         if (realBookKey === "Psalms" && bibleData["Psalm"]) realBookKey = "Psalm";
+         else if (realBookKey === "Song of Solomon" && bibleData["Song of Songs"]) realBookKey = "Song of Songs";
+         else if (realBookKey === "Revelation" && bibleData["Revelations"]) realBookKey = "Revelations";
+      }
 
       if (!realBookKey || !bibleData[realBookKey]) continue;
 
@@ -35,7 +43,7 @@ export const parseScripture = (text, bibleData, versionName) => {
                   reference: `${realBookKey} ${finalChapter}:${finalVerse}`,
                   text: bookData[finalChapter][finalVerse],
                   verseList: [{ verse: finalVerse, text: bookData[finalChapter][finalVerse] }],
-                  version: versionName, // NEW: Add version to object
+                  version: versionName,
                   timestamp: Date.now()
               });
            }
@@ -67,7 +75,7 @@ export const parseScripture = (text, bibleData, versionName) => {
                       reference: `${realBookKey} ${finalChapter}:${vStart}-${actualEnd}`,
                       text: combinedText.join(' '),
                       verseList: verseList,
-                      version: versionName, // NEW: Add version to object
+                      version: versionName,
                       timestamp: Date.now()
                   });
               }

@@ -4,43 +4,40 @@ import { useProjection } from '../../context/ProjectionContext';
 const OverlayView = () => {
   const { liveScripture, fontSize, theme, layoutMode, textAlign, aspectRatio } = useProjection();
 
-  const [dynamicFontSize, setDynamicFontSize] = useState(fontSize);
-  const containerRef = useRef(null); // Ref for the text container (or grid)
+  // We don't need state for dynamic size, we manipulate DOM directly for speed
+  const containerRef = useRef(null);
   const boxRef = useRef(null);
 
-  useEffect(() => {
-    setDynamicFontSize(fontSize);
-  }, [liveScripture, fontSize]);
-
+  // Re-run fitting whenever anything changes
   useLayoutEffect(() => {
-    if (!containerRef.current || !boxRef.current) return;
+    if (!containerRef.current) return;
 
-    const checkFit = () => {
-      const content = containerRef.current;
-      const box = boxRef.current;
-      let iterations = 0;
-      let currentSize = fontSize;
+    const content = containerRef.current;
 
-      // Shrink until content fits
-      while (
-        (content.scrollHeight > box.clientHeight || content.scrollWidth > box.clientWidth) &&
-        currentSize > 16 &&
-        iterations < 100
-      ) {
-        currentSize -= 2;
-        content.style.fontSize = `${currentSize}px`;
-        iterations++;
-      }
-    };
+    // 1. Reset to the Slider's requested size first
+    content.style.fontSize = `${fontSize}px`;
 
-    containerRef.current.style.fontSize = `${fontSize}px`;
-    checkFit();
+    // 2. Shrink Loop
+    let currentSize = fontSize;
+
+    // Safety: Stop if we get too small (16px) or loop too many times
+    let iterations = 0;
+
+    // CRITICAL FIX: Compare scrollHeight (text size) vs clientHeight (available space)
+    // of the CONTENT element itself. This respects the parent's padding automatically.
+    while (
+      (content.scrollHeight > content.clientHeight || content.scrollWidth > content.clientWidth) &&
+      currentSize > 16 &&
+      iterations < 50
+    ) {
+      currentSize -= 2; // Step down by 2px
+      content.style.fontSize = `${currentSize}px`;
+      iterations++;
+    }
   }, [liveScripture, fontSize, layoutMode, aspectRatio, textAlign]);
 
   const isLowerThird = layoutMode === 'LOWER_THIRD';
   const isUltraWide = aspectRatio === '12:5';
-
-  // CHECK FOR BILINGUAL
   const hasSecondary = !!liveScripture?.secondaryText;
 
   // --- STYLES ---
@@ -103,6 +100,7 @@ const OverlayView = () => {
       ) : (
         <div style={wrapperStyle} className="animate-in zoom-in-95 fade-in duration-300">
 
+          {/* Header Tab */}
           <div className={`
               bg-purple-900 text-white px-6 py-2 inline-block rounded-t-xl font-bold text-2xl shadow-lg border-t border-l border-r border-purple-400 relative z-20
               ${!isLowerThird && "mx-auto"}
@@ -110,34 +108,40 @@ const OverlayView = () => {
             {liveScripture.reference}
           </div>
 
+          {/* Main Box */}
           <div
             ref={boxRef}
             className={`
                 bg-slate-900/95 shadow-2xl border border-slate-700 w-full relative z-10
                 ${isLowerThird ? "rounded-tr-xl rounded-tl-xl rounded-bl-xl rounded-br-xl" : "rounded-xl"}
-                 rounded-xl
             `}
             style={bodyStyle}
           >
-            {/* CONTAINER FOR TEXT (Used for measuring auto-shrink) */}
+            {/* Inner Content (Measured for auto-shrink) */}
             <div
                 ref={containerRef}
                 style={{
                     color: theme.textColor,
                     width: '100%',
-                    height: '100%', // Ensure it fills the box
+                    height: '100%',
+                    overflow: 'hidden', // Ensure it reports correct scrollHeight
                     wordWrap: 'break-word',
+                    whiteSpace: 'pre-wrap',
                     margin: 0,
-                    // BILINGUAL GRID LOGIC
-                    display: hasSecondary ? 'grid' : 'block',
-                    gridTemplateColumns: hasSecondary ? '1fr 1fr' : '1fr',
+
+                    // Flex/Grid Logic for Alignment
+                    display: hasSecondary ? 'grid' : 'flex',
+                    flexDirection: 'column', // Stack text vertically if single
+                    justifyContent: isLowerThird ? 'center' : 'flex-start', // Vertical Align
+
+                    gridTemplateColumns: hasSecondary ? '1fr 1fr' : undefined,
                     gap: hasSecondary ? '40px' : '0',
-                    alignItems: isLowerThird ? 'center' : 'start', // Vertical Align
+
                     textAlign: textAlign
                 }}
             >
-                {/* PRIMARY TEXT */}
-                <div className={`${hasSecondary ? "border-r border-slate-600 pr-5" : ""}`}>
+                {/* Primary Verse */}
+                <div className={`${hasSecondary ? "border-r border-slate-600 pr-5" : "w-full"}`}>
                     {hasSecondary && (
                         <div className="text-[0.6em] opacity-70 mb-2 uppercase font-bold tracking-widest text-purple-300">
                             {liveScripture.version}
@@ -146,7 +150,7 @@ const OverlayView = () => {
                     <p className="font-serif leading-tight drop-shadow-md">{liveScripture.text}</p>
                 </div>
 
-                {/* SECONDARY TEXT */}
+                {/* Secondary Verse */}
                 {hasSecondary && (
                     <div className="pl-5">
                         <div className="text-[0.6em] opacity-70 mb-2 uppercase font-bold tracking-widest text-purple-300">

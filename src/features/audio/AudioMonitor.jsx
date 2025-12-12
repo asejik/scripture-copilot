@@ -13,20 +13,9 @@ import esvData from '../../data/esv.json';
 import nltData from '../../data/nlt.json';
 import gwData from '../../data/gw.json';
 
-// --- THEME PRESETS ---
-const THEMES = {
-  'Green': { backgroundColor: '#00b140', textColor: '#ffffff' },
-  'Blue': { backgroundColor: '#0047b1', textColor: '#ffffff' },
-  'Black': { backgroundColor: '#000000', textColor: '#ffffff' },
-  'White': { backgroundColor: '#ffffff', textColor: '#000000' },
-};
-
 const AudioMonitor = () => {
   const [version, setVersion] = useState(() => localStorage.getItem('bible_version') || 'KJV');
-
-  // NEW: Secondary Version (Parallel Mode)
   const [secondaryVersion, setSecondaryVersion] = useState(() => localStorage.getItem('bible_version_sec') || 'NONE');
-
   const [manualInput, setManualInput] = useState('');
   const [searchError, setSearchError] = useState(null);
   const [previewScripture, setPreviewScripture] = useState(null);
@@ -76,7 +65,7 @@ const AudioMonitor = () => {
     }
   }, [version, currentBibleData]);
 
-  const { projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex, slides, jumpToSlide, fontSize, updateFontSize, theme, updateTheme, layoutMode, updateLayoutMode, textAlign, updateTextAlign, aspectRatio, updateAspectRatio, resetSettings } = useProjection();
+  const { projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex, slides, jumpToSlide, fontSize, updateFontSize, layoutMode, updateLayoutMode, textAlign, updateTextAlign, aspectRatio, updateAspectRatio, resetSettings } = useProjection();
 
   const bottomRef = useRef(null);
   useEffect(() => { if (bottomRef.current) bottomRef.current.scrollIntoView({ behavior: 'smooth' }); }, [transcript, interimTranscript]);
@@ -121,13 +110,9 @@ const AudioMonitor = () => {
     if (result) setPreviewScripture(result); else setSearchError(`Scripture not found in ${version}. Check spelling.`);
   };
 
-  // --- MODIFIED PROJECT FUNCTION FOR BILINGUAL SUPPORT ---
   const handleProject = (scripture) => {
     let finalScripture = { ...scripture };
-
-    // Check if Bilingual Mode is active
     if (secondaryVersion !== 'NONE' && secondaryBibleData) {
-        // Fetch secondary text
         const secData = fetchSecondaryText(scripture, secondaryBibleData);
         if (secData) {
             finalScripture.secondaryText = secData.text;
@@ -135,7 +120,6 @@ const AudioMonitor = () => {
             finalScripture.secondaryVersion = secondaryVersion;
         }
     }
-
     projectScripture(finalScripture);
     setActiveScripture(scripture);
     addToHistory(scripture);
@@ -158,12 +142,6 @@ const AudioMonitor = () => {
   };
   const isFavorited = (scripture) => { if (!scripture) return false; return favorites.some(f => f.reference === scripture.reference && f.version === scripture.version); };
 
-  // Helper to apply preset
-  const applyPreset = (presetName) => {
-      const p = THEMES[presetName];
-      if (p) { updateTheme('backgroundColor', p.backgroundColor); updateTheme('textColor', p.textColor); }
-  };
-
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-6xl mx-auto h-[calc(100vh-4rem)]">
       {/* LEFT COLUMN */}
@@ -174,12 +152,10 @@ const AudioMonitor = () => {
                 🎙️ Live Audio
             </h2>
             <div className="flex items-center gap-2">
-              {/* PRIMARY VERSION */}
               <select value={version} onChange={(e) => setVersion(e.target.value)} className="bg-slate-900 text-white text-xs font-bold py-1 px-2 rounded border border-slate-600 focus:outline-none focus:border-purple-500">
                 <option value="KJV">KJV</option><option value="NIV">NIV</option><option value="NKJV">NKJV</option><option value="AMP">AMP</option><option value="ESV">ESV</option><option value="NLT">NLT</option><option value="GW">GW</option>
               </select>
               <span className="text-xs text-slate-500">+</span>
-              {/* NEW: SECONDARY VERSION */}
               <select value={secondaryVersion} onChange={(e) => setSecondaryVersion(e.target.value)} className="bg-slate-900 text-blue-200 text-xs font-bold py-1 px-2 rounded border border-blue-900 focus:outline-none focus:border-blue-500">
                 <option value="NONE">None</option>
                 <option value="KJV">KJV</option><option value="NIV">NIV</option><option value="NKJV">NKJV</option><option value="AMP">AMP</option><option value="ESV">ESV</option><option value="NLT">NLT</option><option value="GW">GW</option>
@@ -250,29 +226,22 @@ const AudioMonitor = () => {
                 </div>
             </div>
 
+            {/* CLEANED UP HEADER: NO THEME CONTROLS */}
             <div className="flex flex-wrap items-center gap-2 text-sm bg-slate-950 p-2 rounded border border-slate-800">
                 <select value={layoutMode} onChange={(e) => updateLayoutMode(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="LOWER_THIRD">Lower Third</option><option value="CENTER">Center</option></select>
-                <select value={aspectRatio} onChange={(e) => updateAspectRatio(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="16:9">16:9</option><option value="12:5">12:5</option></select>
+                <select value={aspectRatio} onChange={(e) => updateAspectRatio(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="16:9">16:9</option><option value="12:5">12:5 (Ultra)</option></select>
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
                 <select value={textAlign} onChange={(e) => updateTextAlign(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justify</option></select>
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
 
-                {/* NEW: THEME PRESETS */}
-                <select onChange={(e) => applyPreset(e.target.value)} defaultValue="" className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none">
-                    <option value="" disabled>Presets...</option>
-                    {Object.keys(THEMES).map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+                {/* RESTORED FONT SLIDER */}
+                <div className="flex items-center gap-1" title="Font Size"><span className="text-xs text-slate-400">Aa</span><input type="range" min="30" max="120" value={fontSize} onChange={(e) => updateFontSize(parseInt(e.target.value))} className="w-16 accent-purple-500 cursor-pointer" /></div>
 
-                <div className="flex items-center gap-1">
-                    <input type="color" value={theme.backgroundColor} onChange={(e) => updateTheme('backgroundColor', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none p-0 bg-transparent" title="Background" />
-                    <input type="color" value={theme.textColor} onChange={(e) => updateTheme('textColor', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none p-0 bg-transparent" title="Text" />
-                </div>
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
                 <button onClick={() => { if(confirm('Reset all theme settings to default?')) resetSettings(); }} className="text-xs bg-red-900/30 hover:bg-red-900 text-red-400 hover:text-white px-2 py-1 rounded transition-colors cursor-pointer" title="Reset to Factory Defaults">⟳ Reset</button>
             </div>
         </div>
 
-        {/* ... (Main Card & History - Use handleProject instead of projectScripture) ... */}
         <div className="flex-1 bg-slate-900 p-4 overflow-y-auto space-y-4">
             {activeScripture ? (
                 <div className="bg-purple-900/20 border border-purple-500/50 p-4 rounded-xl animate-in fade-in slide-in-from-bottom-4 duration-500 relative flex flex-col">

@@ -34,12 +34,18 @@ export const ProjectionProvider = ({ children }) => {
     } catch (e) { return { backgroundColor: '#00b140', textColor: '#ffffff' }; }
   });
 
+  // 5. NEW: Load Saved Alignment
+  const [textAlign, setTextAlign] = useState(() => {
+    try {
+      return localStorage.getItem('projection_text_align') || 'center';
+    } catch (e) { return 'center'; }
+  });
+
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [slides, setSlides] = useState([]);
 
   const channelName = 'scripture_copilot';
 
-  // Helper: Chunk verses into slides
   const createSlides = (scripture) => {
     if (!scripture.verseList) {
         let ref = scripture.reference;
@@ -95,6 +101,10 @@ export const ProjectionProvider = ({ children }) => {
         } else if (type === 'UPDATE_LAYOUT') {
           setLayoutMode(payload.layoutMode);
           localStorage.setItem('projection_layout_mode', payload.layoutMode);
+        } else if (type === 'UPDATE_ALIGN') {
+          // NEW: Handle Alignment
+          setTextAlign(payload.textAlign);
+          localStorage.setItem('projection_text_align', payload.textAlign);
         }
       } catch (e) {
         console.warn("Storage access blocked/failed", e);
@@ -186,14 +196,26 @@ export const ProjectionProvider = ({ children }) => {
     channel.close();
   };
 
-  // --- EXPORT ---
+  // NEW: Update Alignment Action
+  const updateTextAlign = (align) => {
+    setTextAlign(align);
+    try {
+      localStorage.setItem('projection_text_align', align);
+    } catch(e) {}
+
+    const channel = new BroadcastChannel(channelName);
+    channel.postMessage({ type: 'UPDATE_ALIGN', payload: { textAlign: align } });
+    channel.close();
+  };
+
   return (
     <ProjectionContext.Provider value={{
         liveScripture, projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex,
-        totalSlides: slides.length, // FIX: Calculated properly here
+        totalSlides: slides.length,
         fontSize, updateFontSize,
         theme, updateTheme,
-        layoutMode, updateLayoutMode
+        layoutMode, updateLayoutMode,
+        textAlign, updateTextAlign // Export Alignment
     }}>
       {children}
     </ProjectionContext.Provider>

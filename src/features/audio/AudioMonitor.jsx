@@ -66,8 +66,10 @@ const AudioMonitor = () => {
     updateFontSize,
     theme,
     updateTheme,
-    layoutMode,      // Get Mode
-    updateLayoutMode // Get Updater
+    layoutMode,
+    updateLayoutMode,
+    textAlign,      // Get Alignment
+    updateTextAlign // Get Updater
   } = useProjection();
 
   const bottomRef = useRef(null);
@@ -108,7 +110,6 @@ const AudioMonitor = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [previewScripture, detectedScripture, nextSlide, prevSlide, clearProjection, projectScripture]);
-
 
   const handleManualSearch = (e) => {
     e.preventDefault();
@@ -220,9 +221,8 @@ const AudioMonitor = () => {
                 <button onClick={clearProjection} className="text-xs bg-slate-700 hover:bg-red-600 text-white px-3 py-1 rounded transition-colors cursor-pointer" title="[Esc]">Clear</button>
             </div>
 
-            {/* NEW: LAYOUT & STYLE CONTROLS ROW */}
             <div className="flex flex-wrap items-center gap-2 text-sm bg-slate-950 p-2 rounded border border-slate-800">
-                {/* 1. View Mode Dropdown */}
+                {/* 1. View Mode */}
                 <select
                     value={layoutMode}
                     onChange={(e) => updateLayoutMode(e.target.value)}
@@ -235,7 +235,22 @@ const AudioMonitor = () => {
 
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
 
-                {/* 2. Font Size */}
+                {/* 2. Alignment Selector */}
+                <select
+                    value={textAlign}
+                    onChange={(e) => updateTextAlign(e.target.value)}
+                    className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"
+                    title="Text Alignment"
+                >
+                    <option value="left">Left</option>
+                    <option value="center">Center</option>
+                    <option value="right">Right</option>
+                    <option value="justify">Justify</option>
+                </select>
+
+                <div className="w-px h-4 bg-slate-700 mx-1"></div>
+
+                {/* 3. Font Size */}
                 <div className="flex items-center gap-1" title="Font Size">
                     <span className="text-xs text-slate-400">Aa</span>
                     <input type="range" min="30" max="120" value={fontSize} onChange={(e) => updateFontSize(parseInt(e.target.value))} className="w-16 accent-purple-500 cursor-pointer" />
@@ -243,7 +258,7 @@ const AudioMonitor = () => {
 
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
 
-                {/* 3. Colors */}
+                {/* 4. Colors */}
                 <div className="flex items-center gap-1">
                     <input type="color" value={theme.backgroundColor} onChange={(e) => updateTheme('backgroundColor', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none p-0 bg-transparent" title="Background Color" />
                     <input type="color" value={theme.textColor} onChange={(e) => updateTheme('textColor', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none p-0 bg-transparent" title="Text Color" />

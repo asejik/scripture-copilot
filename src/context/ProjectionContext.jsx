@@ -19,7 +19,6 @@ export const ProjectionProvider = ({ children }) => {
   const [textAlign, setTextAlign] = useState(() => {
     try { return localStorage.getItem('projection_text_align') || 'center'; } catch (e) { return 'center'; }
   });
-  // NEW: Aspect Ratio State
   const [aspectRatio, setAspectRatio] = useState(() => {
     try { return localStorage.getItem('projection_aspect_ratio') || '16:9'; } catch (e) { return '16:9'; }
   });
@@ -83,7 +82,6 @@ export const ProjectionProvider = ({ children }) => {
           setTextAlign(payload.textAlign);
           localStorage.setItem('projection_text_align', payload.textAlign);
         } else if (type === 'UPDATE_ASPECT') {
-          // NEW: Handle Aspect Ratio
           setAspectRatio(payload.aspectRatio);
           localStorage.setItem('projection_aspect_ratio', payload.aspectRatio);
         }
@@ -114,12 +112,21 @@ export const ProjectionProvider = ({ children }) => {
   const updateTheme = (k, v) => { const t = { ...theme, [k]: v }; setTheme(t); try { localStorage.setItem('projection_theme', JSON.stringify(t)); } catch(e){} broadcast('UPDATE_THEME', { theme: t }); };
   const updateLayoutMode = (m) => { setLayoutMode(m); try { localStorage.setItem('projection_layout_mode', m); } catch(e){} broadcast('UPDATE_LAYOUT', { layoutMode: m }); };
   const updateTextAlign = (a) => { setTextAlign(a); try { localStorage.setItem('projection_text_align', a); } catch(e){} broadcast('UPDATE_ALIGN', { textAlign: a }); };
+  const updateAspectRatio = (r) => { setAspectRatio(r); try { localStorage.setItem('projection_aspect_ratio', r); } catch(e){} broadcast('UPDATE_ASPECT', { aspectRatio: r }); };
 
-  // NEW: Update Aspect Ratio Action
-  const updateAspectRatio = (r) => {
-    setAspectRatio(r);
-    try { localStorage.setItem('projection_aspect_ratio', r); } catch(e){}
-    broadcast('UPDATE_ASPECT', { aspectRatio: r });
+  // NEW: Factory Reset Action
+  const resetSettings = () => {
+    // 1. Reset Values
+    updateFontSize(60);
+    updateLayoutMode('LOWER_THIRD');
+    updateTextAlign('center');
+    updateAspectRatio('16:9');
+
+    // 2. Reset Theme manually since updateTheme takes key/value
+    const defaultTheme = { backgroundColor: '#00b140', textColor: '#ffffff' };
+    setTheme(defaultTheme);
+    try { localStorage.setItem('projection_theme', JSON.stringify(defaultTheme)); } catch(e){}
+    broadcast('UPDATE_THEME', { theme: defaultTheme });
   };
 
   return (
@@ -127,7 +134,8 @@ export const ProjectionProvider = ({ children }) => {
         liveScripture, projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex,
         totalSlides: slides.length, fontSize, updateFontSize, theme, updateTheme,
         layoutMode, updateLayoutMode, textAlign, updateTextAlign,
-        aspectRatio, updateAspectRatio // Export
+        aspectRatio, updateAspectRatio,
+        resetSettings // Export Reset
     }}>
       {children}
     </ProjectionContext.Provider>

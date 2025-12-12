@@ -18,8 +18,6 @@ const AudioMonitor = () => {
   const [manualInput, setManualInput] = useState('');
   const [searchError, setSearchError] = useState(null);
   const [previewScripture, setPreviewScripture] = useState(null);
-
-  // NEW: Wake Lock State
   const [isWakeLockActive, setIsWakeLockActive] = useState(false);
 
   const [favorites, setFavorites] = useState(() => {
@@ -29,45 +27,21 @@ const AudioMonitor = () => {
   useEffect(() => { localStorage.setItem('bible_version', version); }, [version]);
   useEffect(() => { localStorage.setItem('saved_favorites', JSON.stringify(favorites)); }, [favorites]);
 
-  // --- WAKE LOCK LOGIC ---
   useEffect(() => {
     let wakeLock = null;
-
     const requestWakeLock = async () => {
       try {
         if ('wakeLock' in navigator) {
           wakeLock = await navigator.wakeLock.request('screen');
           setIsWakeLockActive(true);
-          console.log('Screen Wake Lock: Active');
-
-          // If the lock is released (e.g. user minimizes window), update state
-          wakeLock.addEventListener('release', () => {
-            setIsWakeLockActive(false);
-            console.log('Screen Wake Lock: Released');
-          });
+          wakeLock.addEventListener('release', () => setIsWakeLockActive(false));
         }
-      } catch (err) {
-        console.error(`${err.name}, ${err.message}`);
-        setIsWakeLockActive(false);
-      }
+      } catch (err) { setIsWakeLockActive(false); }
     };
-
-    // Request lock on load
     requestWakeLock();
-
-    // Re-request lock if the tab becomes visible again (browsers often drop it when hidden)
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && !wakeLock) {
-        requestWakeLock();
-      }
-    };
-
+    const handleVisibilityChange = () => { if (document.visibilityState === 'visible' && !wakeLock) requestWakeLock(); };
     document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      if (wakeLock) wakeLock.release();
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
+    return () => { if (wakeLock) wakeLock.release(); document.removeEventListener('visibilitychange', handleVisibilityChange); };
   }, []);
 
   const getBibleData = () => {
@@ -89,12 +63,11 @@ const AudioMonitor = () => {
   const {
     projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex, totalSlides, liveScripture,
     fontSize, updateFontSize, theme, updateTheme, layoutMode, updateLayoutMode, textAlign, updateTextAlign,
-    aspectRatio, updateAspectRatio
+    aspectRatio, updateAspectRatio, resetSettings // Get Reset Function
   } = useProjection();
 
   const bottomRef = useRef(null);
   useEffect(() => { if (bottomRef.current) bottomRef.current.scrollIntoView({ behavior: 'smooth' }); }, [transcript, interimTranscript]);
-
   useEffect(() => {
     const handleKeyDown = (e) => {
         if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && e.key !== 'Escape' && e.key !== 'Enter') return;
@@ -119,7 +92,6 @@ const AudioMonitor = () => {
     if (result) setPreviewScripture(result); else setSearchError(`Scripture not found in ${version}. Check spelling.`);
   };
   const confirmProjection = () => { if (previewScripture) { projectScripture(previewScripture); setPreviewScripture(null); setManualInput(''); }};
-
   const exportHistory = () => {
     if (history.length === 0) return;
     const date = new Date().toLocaleDateString(); let content = `SERMON SCRIPTURE NOTES - ${date}\n\n`;
@@ -128,9 +100,7 @@ const AudioMonitor = () => {
     element.href = URL.createObjectURL(file); element.download = `sermon-notes-${Date.now()}.txt`;
     document.body.appendChild(element); element.click(); document.body.removeChild(element);
   };
-
   const handlePreviewEdit = (e) => { setPreviewScripture(prev => ({ ...prev, text: e.target.value, verseList: null })); };
-
   const toggleFavorite = (scripture) => {
     const exists = favorites.find(f => f.reference === scripture.reference && f.version === scripture.version);
     if (exists) setFavorites(prev => prev.filter(f => !(f.reference === scripture.reference && f.version === scripture.version)));
@@ -143,38 +113,34 @@ const AudioMonitor = () => {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-6xl mx-auto h-[calc(100vh-4rem)]">
-
       {/* LEFT COLUMN */}
       <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-full">
         <div className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center shrink-0">
-            <h2 className="text-slate-200 font-semibold flex items-center gap-2">🎙️ Live Audio</h2>
+            <h2 className="text-slate-200 font-semibold flex items-center gap-2">
+                {/* LOGO AREA */}
+                <img src="/logo.png" alt="Logo" className="h-6 w-auto object-contain" onError={(e) => e.target.style.display = 'none'} />
+                🎙️ Live Audio
+            </h2>
             <div className="flex items-center gap-3">
               <select value={version} onChange={(e) => setVersion(e.target.value)} className="bg-slate-900 text-white text-sm font-bold py-1 px-3 rounded border border-slate-600 focus:outline-none focus:border-purple-500 transition-colors">
                 <option value="KJV">KJV</option><option value="NIV">NIV</option><option value="NKJV">NKJV</option><option value="AMP">AMP</option><option value="ESV">ESV</option><option value="NLT">NLT</option><option value="GW">GW</option>
               </select>
-              <div className="flex items-center gap-2">
-                  <div className={`h-2 w-2 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-                  <span className="text-xs text-slate-400 w-12">{isListening ? 'ON AIR' : 'OFF'}</span>
-              </div>
+              <div className="flex items-center gap-2"><div className={`h-2 w-2 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} /><span className="text-xs text-slate-400 w-12">{isListening ? 'ON AIR' : 'OFF'}</span></div>
             </div>
         </div>
-
         <div className="flex-1 bg-slate-950 p-6 overflow-y-auto font-mono text-sm leading-relaxed min-h-[150px]">
             {error && <div className="text-red-400 mb-2">{error}</div>} <span className="text-slate-300">{transcript}</span> <span className="text-emerald-400 italic"> {interimTranscript}</span> <div ref={bottomRef} />
         </div>
-
         <div className="p-4 bg-slate-800 border-t border-slate-700 flex flex-col gap-3 shrink-0">
             <div className="flex gap-3">
                 <button onClick={isListening ? stopListening : startListening} className={`px-4 py-2 rounded-lg font-medium text-white transition-colors cursor-pointer flex-1 ${isListening ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>{isListening ? 'Stop Mic' : 'Start Mic'}</button>
                 <button onClick={resetTranscript} className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 cursor-pointer">Clear Text</button>
             </div>
-
             <form onSubmit={handleManualSearch} className="flex gap-2 relative">
                 <input type="text" value={manualInput} onChange={(e) => setManualInput(e.target.value)} placeholder="Type reference (e.g. John 3:16)..." className="flex-1 bg-slate-950 text-white border border-slate-600 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-500" />
                 <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm cursor-pointer">Search</button>
             </form>
             {searchError && <div className="text-red-400 text-xs text-center">{searchError}</div>}
-
             {previewScripture && (
                 <div className="mt-2 bg-slate-700/50 border border-slate-600 rounded-lg p-3 animate-in fade-in slide-in-from-top-2 border-l-4 border-l-blue-500">
                     <div className="flex justify-between items-start mb-2">
@@ -188,7 +154,6 @@ const AudioMonitor = () => {
                     </div>
                 </div>
             )}
-
             {favorites.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-slate-700">
                     <h4 className="text-xs text-slate-400 uppercase font-bold mb-2">⭐ Quick Access / Favorites</h4>
@@ -213,13 +178,8 @@ const AudioMonitor = () => {
         <div className="bg-slate-800 p-4 border-b border-slate-700 flex flex-col gap-3 shrink-0">
             <div className="flex justify-between items-center">
                 <h2 className="text-purple-400 font-semibold flex items-center gap-2">✨ Detected Scriptures</h2>
-                {/* NEW: AWAKE BADGE */}
                 <div className="flex items-center gap-2">
-                    {isWakeLockActive && (
-                        <span className="text-[10px] bg-green-900/50 text-green-400 px-2 py-1 rounded border border-green-800" title="Screen Wake Lock Active">
-                            🔒 Awake
-                        </span>
-                    )}
+                    {isWakeLockActive && <span className="text-[10px] bg-green-900/50 text-green-400 px-2 py-1 rounded border border-green-800" title="Screen Wake Lock Active">🔒 Awake</span>}
                     <button onClick={clearProjection} className="text-xs bg-slate-700 hover:bg-red-600 text-white px-3 py-1 rounded transition-colors cursor-pointer" title="[Esc]">Clear</button>
                 </div>
             </div>
@@ -236,6 +196,16 @@ const AudioMonitor = () => {
                     <input type="color" value={theme.backgroundColor} onChange={(e) => updateTheme('backgroundColor', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none p-0 bg-transparent" title="Background" />
                     <input type="color" value={theme.textColor} onChange={(e) => updateTheme('textColor', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none p-0 bg-transparent" title="Text" />
                 </div>
+
+                {/* NEW: RESET BUTTON */}
+                <div className="w-px h-4 bg-slate-700 mx-1"></div>
+                <button
+                    onClick={() => { if(confirm('Reset all theme settings to default?')) resetSettings(); }}
+                    className="text-xs bg-red-900/30 hover:bg-red-900 text-red-400 hover:text-white px-2 py-1 rounded transition-colors cursor-pointer"
+                    title="Reset to Factory Defaults"
+                >
+                    ⟳ Reset
+                </button>
             </div>
         </div>
 

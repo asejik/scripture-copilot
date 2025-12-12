@@ -3,25 +3,35 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 const ProjectionContext = createContext();
 
 export const ProjectionProvider = ({ children }) => {
-  // 1. Load Saved State
+  // 1. Load Saved Scriptures
   const [liveScripture, setLiveScripture] = useState(() => {
-    const saved = localStorage.getItem('current_scripture');
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem('current_scripture');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) { return null; }
   });
 
+  // 2. Load Saved Font Size
   const [fontSize, setFontSize] = useState(() => {
-    const saved = localStorage.getItem('projection_font_size');
-    return saved ? parseInt(saved) : 60;
+    try {
+      const saved = localStorage.getItem('projection_font_size');
+      return saved ? parseInt(saved) : 60;
+    } catch (e) { return 60; }
   });
 
-  // NEW: Layout Mode (LOWER_THIRD or CENTER)
+  // 3. Load Saved Layout Mode
   const [layoutMode, setLayoutMode] = useState(() => {
-    return localStorage.getItem('projection_layout_mode') || 'LOWER_THIRD';
+    try {
+      return localStorage.getItem('projection_layout_mode') || 'LOWER_THIRD';
+    } catch (e) { return 'LOWER_THIRD'; }
   });
 
+  // 4. Load Saved Theme
   const [theme, setTheme] = useState(() => {
-    const saved = localStorage.getItem('projection_theme');
-    return saved ? JSON.parse(saved) : { backgroundColor: '#00b140', textColor: '#ffffff' };
+    try {
+      const saved = localStorage.getItem('projection_theme');
+      return saved ? JSON.parse(saved) : { backgroundColor: '#00b140', textColor: '#ffffff' };
+    } catch (e) { return { backgroundColor: '#00b140', textColor: '#ffffff' }; }
   });
 
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -29,6 +39,7 @@ export const ProjectionProvider = ({ children }) => {
 
   const channelName = 'scripture_copilot';
 
+  // Helper: Chunk verses into slides
   const createSlides = (scripture) => {
     if (!scripture.verseList) {
         let ref = scripture.reference;
@@ -68,26 +79,31 @@ export const ProjectionProvider = ({ children }) => {
     channel.onmessage = (event) => {
       const { type, payload } = event.data;
 
-      if (type === 'UPDATE_SLIDE') {
-        setLiveScripture(payload);
-        localStorage.setItem('current_scripture', JSON.stringify(payload));
-      } else if (type === 'CLEAR_SCREEN') {
-        setLiveScripture(null);
-        localStorage.removeItem('current_scripture');
-      } else if (type === 'UPDATE_STYLE') {
-        setFontSize(payload.fontSize);
-        localStorage.setItem('projection_font_size', payload.fontSize);
-      } else if (type === 'UPDATE_THEME') {
-        setTheme(payload.theme);
-        localStorage.setItem('projection_theme', JSON.stringify(payload.theme));
-      } else if (type === 'UPDATE_LAYOUT') {
-        // NEW: Handle Layout Updates
-        setLayoutMode(payload.layoutMode);
-        localStorage.setItem('projection_layout_mode', payload.layoutMode);
+      try {
+        if (type === 'UPDATE_SLIDE') {
+          setLiveScripture(payload);
+          localStorage.setItem('current_scripture', JSON.stringify(payload));
+        } else if (type === 'CLEAR_SCREEN') {
+          setLiveScripture(null);
+          localStorage.removeItem('current_scripture');
+        } else if (type === 'UPDATE_STYLE') {
+          setFontSize(payload.fontSize);
+          localStorage.setItem('projection_font_size', payload.fontSize);
+        } else if (type === 'UPDATE_THEME') {
+          setTheme(payload.theme);
+          localStorage.setItem('projection_theme', JSON.stringify(payload.theme));
+        } else if (type === 'UPDATE_LAYOUT') {
+          setLayoutMode(payload.layoutMode);
+          localStorage.setItem('projection_layout_mode', payload.layoutMode);
+        }
+      } catch (e) {
+        console.warn("Storage access blocked/failed", e);
       }
     };
     return () => channel.close();
   }, []);
+
+  // --- ACTIONS ---
 
   const projectScripture = (scripture) => {
     const generatedSlides = createSlides(scripture);
@@ -114,7 +130,10 @@ export const ProjectionProvider = ({ children }) => {
 
   const updateProjection = (slideData) => {
     setLiveScripture(slideData);
-    localStorage.setItem('current_scripture', JSON.stringify(slideData));
+    try {
+      localStorage.setItem('current_scripture', JSON.stringify(slideData));
+    } catch(e) {}
+
     const channel = new BroadcastChannel(channelName);
     channel.postMessage({ type: 'UPDATE_SLIDE', payload: slideData });
     channel.close();
@@ -124,7 +143,10 @@ export const ProjectionProvider = ({ children }) => {
     setLiveScripture(null);
     setSlides([]);
     setCurrentSlideIndex(0);
-    localStorage.removeItem('current_scripture');
+    try {
+      localStorage.removeItem('current_scripture');
+    } catch(e) {}
+
     const channel = new BroadcastChannel(channelName);
     channel.postMessage({ type: 'CLEAR_SCREEN' });
     channel.close();
@@ -132,7 +154,10 @@ export const ProjectionProvider = ({ children }) => {
 
   const updateFontSize = (newSize) => {
     setFontSize(newSize);
-    localStorage.setItem('projection_font_size', newSize);
+    try {
+      localStorage.setItem('projection_font_size', newSize);
+    } catch(e) {}
+
     const channel = new BroadcastChannel(channelName);
     channel.postMessage({ type: 'UPDATE_STYLE', payload: { fontSize: newSize } });
     channel.close();
@@ -141,26 +166,34 @@ export const ProjectionProvider = ({ children }) => {
   const updateTheme = (key, value) => {
     const newTheme = { ...theme, [key]: value };
     setTheme(newTheme);
-    localStorage.setItem('projection_theme', JSON.stringify(newTheme));
+    try {
+      localStorage.setItem('projection_theme', JSON.stringify(newTheme));
+    } catch(e) {}
+
     const channel = new BroadcastChannel(channelName);
     channel.postMessage({ type: 'UPDATE_THEME', payload: { theme: newTheme } });
     channel.close();
   };
 
-  // NEW: Update Layout Action
   const updateLayoutMode = (mode) => {
     setLayoutMode(mode);
-    localStorage.setItem('projection_layout_mode', mode);
+    try {
+      localStorage.setItem('projection_layout_mode', mode);
+    } catch(e) {}
+
     const channel = new BroadcastChannel(channelName);
     channel.postMessage({ type: 'UPDATE_LAYOUT', payload: { layoutMode: mode } });
     channel.close();
   };
 
+  // --- EXPORT ---
   return (
     <ProjectionContext.Provider value={{
-        liveScripture, projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex, totalSlides,
-        fontSize, updateFontSize, theme, updateTheme,
-        layoutMode, updateLayoutMode // Export Layout
+        liveScripture, projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex,
+        totalSlides: slides.length, // FIX: Calculated properly here
+        fontSize, updateFontSize,
+        theme, updateTheme,
+        layoutMode, updateLayoutMode
     }}>
       {children}
     </ProjectionContext.Provider>

@@ -1,58 +1,99 @@
-import React from 'react';
+import React, { useRef, useLayoutEffect, useState, useEffect } from 'react';
 import { useProjection } from '../../context/ProjectionContext';
 
 const OverlayView = () => {
   const { liveScripture, fontSize, theme, layoutMode } = useProjection();
 
-  // --- 1. DEFINE FIXED BOUNDARIES ---
-  // We use CSS styles to enforce strict dimensions based on the mode.
+  // Local state for the *calculated* font size
+  const [dynamicFontSize, setDynamicFontSize] = useState(fontSize);
+  const textRef = useRef(null);
+  const boxRef = useRef(null);
 
+  // Reset to the slider's "Max Size" whenever the scripture changes
+  useEffect(() => {
+    setDynamicFontSize(fontSize);
+  }, [liveScripture, fontSize]);
+
+  // AUTO-SHRINK LOGIC
+  useLayoutEffect(() => {
+    if (!textRef.current || !boxRef.current) return;
+
+    const checkFit = () => {
+      const text = textRef.current;
+      const box = boxRef.current;
+
+      // Safety break to prevent infinite loops
+      let iterations = 0;
+      let currentSize = fontSize; // Start at Max allowed size
+
+      // Loop while text is taller than the box OR text is wider than the box
+      // AND we haven't hit the minimum legible size (e.g., 20px)
+      while (
+        (text.scrollHeight > box.clientHeight || text.scrollWidth > box.clientWidth) &&
+        currentSize > 20 &&
+        iterations < 100
+      ) {
+        currentSize -= 2; // Shrink by 2px
+        text.style.fontSize = `${currentSize}px`;
+        iterations++;
+      }
+    };
+
+    // Run the check immediately
+    // We set the starting size first to reset any previous shrinking
+    textRef.current.style.fontSize = `${fontSize}px`;
+    checkFit();
+
+  }, [liveScripture, fontSize, layoutMode]); // Re-run when text or mode changes
+
+  // --- LAYOUT DEFINITIONS ---
   const isLowerThird = layoutMode === 'LOWER_THIRD';
 
-  // Wrapper Style: Positions the entire block (Header + Body) on the screen
   const wrapperStyle = isLowerThird
     ? {
-        // LOWER THIRD: Fixed strip at the bottom
         position: 'absolute',
-        bottom: '40px',        // Margin from bottom edge
-        left: '50%',           // Center horizontally
+        bottom: '40px',
+        left: '50%',
         transform: 'translateX(-50%)',
-        width: '90%',          // 90% of screen width
-        height: '280px',       // FIXED HEIGHT (Red Boundary)
+        width: '90%',
+        height: '280px',
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'flex-end' // Align content to bottom of this fixed box
+        justifyContent: 'flex-end',
+        zIndex: 50
       }
     : {
-        // CENTER SCREEN: Large fixed box in the middle
         position: 'absolute',
         top: '50%',
         left: '50%',
         transform: 'translate(-50%, -50%)',
-        width: '85%',          // Fixed Width
-        height: '80%',         // Fixed Height (Red Boundary)
+        width: '85%',
+        height: '80%',
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'flex-start' // Align content to TOP of this fixed box
+        justifyContent: 'flex-start',
+        zIndex: 50
       };
 
-  // Body Style: The actual dark box containing the text
-  // We make it 'flex-1' (fill remaining space) or fixed depending on need.
   const bodyStyle = isLowerThird
     ? {
-        height: '100%',        // Fill the fixed wrapper
+        height: '100%',
+        width: '100%',
         display: 'flex',
-        alignItems: 'center',  // Vertically Center text in the strip
-        justifyContent: 'flex-start', // Text starts from left
-        padding: '0 40px'      // Left/Right Padding
+        alignItems: 'center',
+        justifyContent: 'center', // Changed to Center for better auto-fit look
+        padding: '0 40px',
+        overflow: 'hidden'
       }
     : {
-        height: '100%',        // Fill the fixed wrapper
+        height: '100%',
+        width: '100%',
         display: 'flex',
-        alignItems: 'flex-start', // Text starts at TOP
-        justifyContent: 'center', // Horizontally Center
-        padding: '60px 40px',     // Top Padding (Space from header)
-        textAlign: 'center'
+        alignItems: 'flex-start',
+        justifyContent: 'center',
+        padding: '60px 40px',
+        textAlign: 'center',
+        overflow: 'hidden'
       };
 
   return (
@@ -68,31 +109,33 @@ const OverlayView = () => {
       ) : (
         <div style={wrapperStyle} className="animate-in zoom-in-95 fade-in duration-300">
 
-          {/* Reference Header (The Tab) */}
-          {/* We position this relatively so it sits on top of the body */}
+          {/* Header */}
           <div className={`
-              bg-purple-900 text-white px-6 py-2 inline-block rounded-t-xl font-bold text-2xl shadow-lg border-t border-l border-r border-purple-400 z-10
-              ${!isLowerThird && "mx-auto"} // Center the tab in Center Mode
+              bg-purple-900 text-white px-6 py-2 inline-block rounded-t-xl font-bold text-2xl shadow-lg border-t border-l border-r border-purple-400 relative z-20
+              ${!isLowerThird && "mx-auto"}
           `}>
             {liveScripture.reference}
           </div>
 
-          {/* Verse Body (The Slate Box) */}
+          {/* Body Box */}
           <div
+            ref={boxRef} // Reference to the container
             className={`
-                bg-slate-900/95 rounded-b-xl shadow-2xl border border-slate-700 w-full overflow-hidden
-                ${isLowerThird ? "rounded-tr-xl" : "rounded-t-xl"}
+                bg-slate-900/95 shadow-2xl border border-slate-700 w-full relative z-10
+                ${isLowerThird ? "rounded-tr-xl rounded-tl-xl rounded-bl-xl rounded-br-xl" : "rounded-xl"}
+                 rounded-xl
             `}
             style={bodyStyle}
           >
             <p
-                className="font-serif leading-snug drop-shadow-md transition-all duration-300 ease-out"
+                ref={textRef} // Reference to the text itself
+                className="font-serif leading-tight drop-shadow-md transition-opacity duration-100 ease-out text-center"
                 style={{
-                    fontSize: `${fontSize}px`,
+                    // Initial fontSize is set via the effect, but we set color here
                     color: theme.textColor,
-                    // Ensure text doesn't overflow weirdly
                     width: '100%',
-                    wordWrap: 'break-word'
+                    wordWrap: 'break-word',
+                    margin: 0
                 }}
             >
               {liveScripture.text}

@@ -3,6 +3,7 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 const ProjectionContext = createContext();
 
 export const ProjectionProvider = ({ children }) => {
+  // 1. Load Saved Data
   const [liveScripture, setLiveScripture] = useState(() => {
     try { return JSON.parse(localStorage.getItem('current_scripture')); } catch (e) { return null; }
   });
@@ -28,6 +29,7 @@ export const ProjectionProvider = ({ children }) => {
   const channelName = 'scripture_copilot';
 
   const createSlides = (scripture) => {
+    // Basic single slide if no verse list (manual typing fallback)
     if (!scripture.verseList) {
         let ref = scripture.reference;
         if (scripture.version && !ref.includes(`(${scripture.version})`)) {
@@ -36,23 +38,41 @@ export const ProjectionProvider = ({ children }) => {
         return [{ ...scripture, reference: ref }];
     }
 
-    // CHANGE: 1 Verse per slide (Requested Update)
+    // UPDATED: 1 Verse per slide is standard, but we must handle Secondary Text
     const VERSES_PER_SLIDE = 1;
     const chunks = [];
     const baseRef = scripture.reference.split(':')[0];
     const version = scripture.version;
+    const secondaryVersion = scripture.secondaryVersion;
 
     for (let i = 0; i < scripture.verseList.length; i += VERSES_PER_SLIDE) {
-        const chunk = scripture.verseList.slice(i, i + VERSES_PER_SLIDE);
-        const slideText = chunk.map(v => `${v.verse} ${v.text}`).join(' ');
-        const startV = chunk[0].verse;
-        const endV = chunk[chunk.length - 1].verse;
+        // Get Primary Verse
+        const primaryV = scripture.verseList[i];
 
-        let ref = `${baseRef}:${startV}${startV !== endV ? '-' + endV : ''}`;
+        // Get Secondary Verse (if available) - match by index since they should align
+        const secondaryV = scripture.secondaryVerseList ? scripture.secondaryVerseList[i] : null;
+
+        // Build Text
+        const slideText = `${primaryV.verse} ${primaryV.text}`;
+
+        // Build Reference
+        let ref = `${baseRef}:${primaryV.verse}`;
         if (version) ref += ` (${version})`;
 
+        // Add Secondary Info if exists
+        if (secondaryV) {
+            // Append secondary version to ref if space allows, or handle in display
+            if (secondaryVersion) ref += ` / (${secondaryVersion})`;
+        }
+
         chunks.push({
-            reference: ref, text: slideText, version: version,
+            reference: ref,
+            text: slideText,
+            version: version,
+            // Pass secondary data to the slide
+            secondaryText: secondaryV ? `${secondaryV.verse} ${secondaryV.text}` : null,
+            secondaryVersion: secondaryVersion,
+
             totalSlides: Math.ceil(scripture.verseList.length / VERSES_PER_SLIDE),
             slideIndex: chunks.length + 1
         });
@@ -106,14 +126,7 @@ export const ProjectionProvider = ({ children }) => {
 
   const nextSlide = () => { if (currentSlideIndex < slides.length - 1) { const i = currentSlideIndex + 1; setCurrentSlideIndex(i); updateProjection(slides[i]); }};
   const prevSlide = () => { if (currentSlideIndex > 0) { const i = currentSlideIndex - 1; setCurrentSlideIndex(i); updateProjection(slides[i]); }};
-
-  // NEW: Jump to specific slide
-  const jumpToSlide = (index) => {
-    if (index >= 0 && index < slides.length) {
-        setCurrentSlideIndex(index);
-        updateProjection(slides[index]);
-    }
-  };
+  const jumpToSlide = (index) => { if (index >= 0 && index < slides.length) { setCurrentSlideIndex(index); updateProjection(slides[index]); }};
 
   const updateProjection = (s) => { setLiveScripture(s); try { localStorage.setItem('current_scripture', JSON.stringify(s)); } catch(e){} broadcast('UPDATE_SLIDE', s); };
   const clearProjection = () => { setLiveScripture(null); setSlides([]); try { localStorage.removeItem('current_scripture'); } catch(e){} broadcast('CLEAR_SCREEN'); };
@@ -122,6 +135,7 @@ export const ProjectionProvider = ({ children }) => {
   const updateLayoutMode = (m) => { setLayoutMode(m); try { localStorage.setItem('projection_layout_mode', m); } catch(e){} broadcast('UPDATE_LAYOUT', { layoutMode: m }); };
   const updateTextAlign = (a) => { setTextAlign(a); try { localStorage.setItem('projection_text_align', a); } catch(e){} broadcast('UPDATE_ALIGN', { textAlign: a }); };
   const updateAspectRatio = (r) => { setAspectRatio(r); try { localStorage.setItem('projection_aspect_ratio', r); } catch(e){} broadcast('UPDATE_ASPECT', { aspectRatio: r }); };
+
   const resetSettings = () => {
     updateFontSize(60); updateLayoutMode('LOWER_THIRD'); updateTextAlign('center'); updateAspectRatio('16:9');
     const defaultTheme = { backgroundColor: '#00b140', textColor: '#ffffff' };
@@ -131,7 +145,7 @@ export const ProjectionProvider = ({ children }) => {
   return (
     <ProjectionContext.Provider value={{
         liveScripture, projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex,
-        totalSlides: slides.length, slides, jumpToSlide, // EXPORTED SLIDES & JUMP
+        totalSlides: slides.length, slides, jumpToSlide,
         fontSize, updateFontSize, theme, updateTheme,
         layoutMode, updateLayoutMode, textAlign, updateTextAlign,
         aspectRatio, updateAspectRatio, resetSettings

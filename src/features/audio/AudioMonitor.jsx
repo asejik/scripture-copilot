@@ -3,7 +3,7 @@ import useSpeechRecognition from '../../hooks/useSpeechRecognition';
 import useScriptureDetection from '../../hooks/useScriptureDetection';
 import { useProjection } from '../../context/ProjectionContext';
 import { normalizeSpokenText } from '../../utils/textNormalizer';
-import { parseScripture } from '../../utils/scriptureParser';
+import { parseScripture, fetchSecondaryText } from '../../utils/scriptureParser';
 
 import kjvData from '../../data/kjv.json';
 import nivData from '../../data/niv.json';
@@ -13,23 +13,32 @@ import esvData from '../../data/esv.json';
 import nltData from '../../data/nlt.json';
 import gwData from '../../data/gw.json';
 
+// --- THEME PRESETS ---
+const THEMES = {
+  'Green': { backgroundColor: '#00b140', textColor: '#ffffff' },
+  'Blue': { backgroundColor: '#0047b1', textColor: '#ffffff' },
+  'Black': { backgroundColor: '#000000', textColor: '#ffffff' },
+  'White': { backgroundColor: '#ffffff', textColor: '#000000' },
+};
+
 const AudioMonitor = () => {
   const [version, setVersion] = useState(() => localStorage.getItem('bible_version') || 'KJV');
+
+  // NEW: Secondary Version (Parallel Mode)
+  const [secondaryVersion, setSecondaryVersion] = useState(() => localStorage.getItem('bible_version_sec') || 'NONE');
+
   const [manualInput, setManualInput] = useState('');
   const [searchError, setSearchError] = useState(null);
   const [previewScripture, setPreviewScripture] = useState(null);
   const [isWakeLockActive, setIsWakeLockActive] = useState(false);
-
-  // AutoComplete
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
 
-  const [favorites, setFavorites] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('saved_favorites')) || []; } catch (e) { return []; }
-  });
+  const [favorites, setFavorites] = useState(() => { try { return JSON.parse(localStorage.getItem('saved_favorites')) || []; } catch (e) { return []; }});
 
   useEffect(() => { localStorage.setItem('bible_version', version); }, [version]);
+  useEffect(() => { localStorage.setItem('bible_version_sec', secondaryVersion); }, [secondaryVersion]);
   useEffect(() => { localStorage.setItem('saved_favorites', JSON.stringify(favorites)); }, [favorites]);
 
   const BOOK_LIST = useMemo(() => Object.keys(kjvData), []);
@@ -37,13 +46,7 @@ const AudioMonitor = () => {
   useEffect(() => {
     let wakeLock = null;
     const requestWakeLock = async () => {
-      try {
-        if ('wakeLock' in navigator) {
-          wakeLock = await navigator.wakeLock.request('screen');
-          setIsWakeLockActive(true);
-          wakeLock.addEventListener('release', () => setIsWakeLockActive(false));
-        }
-      } catch (err) { setIsWakeLockActive(false); }
+      try { if ('wakeLock' in navigator) { wakeLock = await navigator.wakeLock.request('screen'); setIsWakeLockActive(true); wakeLock.addEventListener('release', () => setIsWakeLockActive(false)); }} catch (err) { setIsWakeLockActive(false); }
     };
     requestWakeLock();
     const handleVisibilityChange = () => { if (document.visibilityState === 'visible' && !wakeLock) requestWakeLock(); };
@@ -51,57 +54,35 @@ const AudioMonitor = () => {
     return () => { if (wakeLock) wakeLock.release(); document.removeEventListener('visibilitychange', handleVisibilityChange); };
   }, []);
 
-  const getBibleData = () => {
-    switch(version) {
-      case 'KJV': return kjvData;
-      case 'NIV': return nivData;
-      case 'NKJV': return nkjvData;
-      case 'AMP': return ampData;
-      case 'ESV': return esvData;
-      case 'NLT': return nltData;
-      case 'GW': return gwData;
-      default: return kjvData;
+  const getBibleData = (v) => {
+    switch(v) {
+      case 'KJV': return kjvData; case 'NIV': return nivData; case 'NKJV': return nkjvData; case 'AMP': return ampData; case 'ESV': return esvData; case 'NLT': return nltData; case 'GW': return gwData; default: return null;
     }
   };
 
-  const currentBibleData = getBibleData();
+  const currentBibleData = getBibleData(version);
+  const secondaryBibleData = getBibleData(secondaryVersion);
+
   const { isListening, transcript, interimTranscript, startListening, stopListening, resetTranscript, error } = useSpeechRecognition();
-
-  // Get addToHistory from hook
   const { detectedScripture: voiceDetected, history, clearHistory, addToHistory } = useScriptureDetection(transcript + ' ' + interimTranscript, currentBibleData, version);
-
   const [activeScripture, setActiveScripture] = useState(null);
 
-  // Sync voice detection to activeScripture
-  useEffect(() => {
-    if (voiceDetected) setActiveScripture(voiceDetected);
-  }, [voiceDetected]);
+  useEffect(() => { if (voiceDetected) setActiveScripture(voiceDetected); }, [voiceDetected]);
 
-  // FIX: Update Active Scripture when Version Changes
   useEffect(() => {
     if (activeScripture) {
-        // Re-parse the current reference using the NEW bible data
-        // We pass the reference string (e.g. "John 3:16") to the parser
         const updatedResult = parseScripture(activeScripture.reference, currentBibleData, version);
-        if (updatedResult) {
-            setActiveScripture(updatedResult);
-        }
+        if (updatedResult) setActiveScripture(updatedResult);
     }
-  }, [version, currentBibleData]); // Dependency on version ensures it updates
+  }, [version, currentBibleData]);
 
-  const {
-    projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex,
-    slides, jumpToSlide,
-    fontSize, updateFontSize, theme, updateTheme, layoutMode, updateLayoutMode, textAlign, updateTextAlign,
-    aspectRatio, updateAspectRatio, resetSettings
-  } = useProjection();
+  const { projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex, slides, jumpToSlide, fontSize, updateFontSize, theme, updateTheme, layoutMode, updateLayoutMode, textAlign, updateTextAlign, aspectRatio, updateAspectRatio, resetSettings } = useProjection();
 
   const bottomRef = useRef(null);
   useEffect(() => { if (bottomRef.current) bottomRef.current.scrollIntoView({ behavior: 'smooth' }); }, [transcript, interimTranscript]);
 
   const handleInputChange = (e) => {
-    const userInput = e.target.value;
-    setManualInput(userInput);
+    const userInput = e.target.value; setManualInput(userInput);
     if (userInput && !/\d+:/.test(userInput) && !/\d\s\d/.test(userInput)) {
         const searchTerm = userInput.toLowerCase();
         const filtered = BOOK_LIST.filter(book => book.toLowerCase().startsWith(searchTerm) || book.toLowerCase().replace(/\s/g, '').startsWith(searchTerm.replace(/\s/g, '')));
@@ -112,13 +93,11 @@ const AudioMonitor = () => {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-        if (e.target.tagName === 'INPUT' && e.target.type === 'text') {
-            if (showSuggestions) {
-                if (e.key === 'ArrowDown') { e.preventDefault(); setActiveSuggestionIndex(prev => (prev + 1) % suggestions.length); return; }
-                if (e.key === 'ArrowUp') { e.preventDefault(); setActiveSuggestionIndex(prev => (prev - 1 + suggestions.length) % suggestions.length); return; }
-                if (e.key === 'Enter') { e.preventDefault(); selectSuggestion(suggestions[activeSuggestionIndex]); return; }
-                if (e.key === 'Escape') { setShowSuggestions(false); return; }
-            }
+        if (e.target.tagName === 'INPUT' && e.target.type === 'text' && showSuggestions) {
+            if (e.key === 'ArrowDown') { e.preventDefault(); setActiveSuggestionIndex(prev => (prev + 1) % suggestions.length); return; }
+            if (e.key === 'ArrowUp') { e.preventDefault(); setActiveSuggestionIndex(prev => (prev - 1 + suggestions.length) % suggestions.length); return; }
+            if (e.key === 'Enter') { e.preventDefault(); selectSuggestion(suggestions[activeSuggestionIndex]); return; }
+            if (e.key === 'Escape') { setShowSuggestions(false); return; }
         }
         if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && e.key !== 'Escape' && e.key !== 'Enter') return;
         switch(e.key) {
@@ -126,13 +105,13 @@ const AudioMonitor = () => {
             case 'ArrowRight': nextSlide(); break;
             case 'ArrowLeft': prevSlide(); break;
             case 'Enter': if (previewScripture && !e.shiftKey) { e.preventDefault(); confirmProjection(); } break;
-            case 'p': if (e.altKey && activeScripture) projectScripture(activeScripture); break;
+            case 'p': if (e.altKey && activeScripture) handleProject(activeScripture); break;
             default: break;
         }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [previewScripture, activeScripture, nextSlide, prevSlide, clearProjection, projectScripture, showSuggestions, suggestions, activeSuggestionIndex]);
+  }, [previewScripture, activeScripture, nextSlide, prevSlide, clearProjection, showSuggestions, suggestions, activeSuggestionIndex]);
 
   const handleManualSearch = (e) => {
     e.preventDefault(); setSearchError(null); setPreviewScripture(null);
@@ -142,50 +121,70 @@ const AudioMonitor = () => {
     if (result) setPreviewScripture(result); else setSearchError(`Scripture not found in ${version}. Check spelling.`);
   };
 
-  const confirmProjection = () => {
-    if (previewScripture) {
-        projectScripture(previewScripture);
-        setActiveScripture(previewScripture); // Update Main Card
-        addToHistory(previewScripture);       // FIX: Manually add to History
-        setPreviewScripture(null);
-        setManualInput('');
+  // --- MODIFIED PROJECT FUNCTION FOR BILINGUAL SUPPORT ---
+  const handleProject = (scripture) => {
+    let finalScripture = { ...scripture };
+
+    // Check if Bilingual Mode is active
+    if (secondaryVersion !== 'NONE' && secondaryBibleData) {
+        // Fetch secondary text
+        const secData = fetchSecondaryText(scripture, secondaryBibleData);
+        if (secData) {
+            finalScripture.secondaryText = secData.text;
+            finalScripture.secondaryVerseList = secData.verseList;
+            finalScripture.secondaryVersion = secondaryVersion;
+        }
     }
+
+    projectScripture(finalScripture);
+    setActiveScripture(scripture);
+    addToHistory(scripture);
+    setPreviewScripture(null);
+    setManualInput('');
   };
 
+  const confirmProjection = () => { if (previewScripture) handleProject(previewScripture); };
+
   const exportHistory = () => {
-    if (history.length === 0) return;
-    const date = new Date().toLocaleDateString(); let content = `SERMON SCRIPTURE NOTES - ${date}\n\n`;
+    if (history.length === 0) return; const date = new Date().toLocaleDateString(); let content = `SERMON SCRIPTURE NOTES - ${date}\n\n`;
     [...history].reverse().forEach((item, index) => { content += `${index + 1}. ${item.reference} (${item.version})\n`; content += `"${item.text}"\n\n`; });
     const element = document.createElement("a"); const file = new Blob([content], {type: 'text/plain'});
-    element.href = URL.createObjectURL(file); element.download = `sermon-notes-${Date.now()}.txt`;
-    document.body.appendChild(element); element.click(); document.body.removeChild(element);
+    element.href = URL.createObjectURL(file); element.download = `sermon-notes-${Date.now()}.txt`; document.body.appendChild(element); element.click(); document.body.removeChild(element);
   };
   const handlePreviewEdit = (e) => { setPreviewScripture(prev => ({ ...prev, text: e.target.value, verseList: null })); };
   const toggleFavorite = (scripture) => {
     const exists = favorites.find(f => f.reference === scripture.reference && f.version === scripture.version);
-    if (exists) setFavorites(prev => prev.filter(f => !(f.reference === scripture.reference && f.version === scripture.version)));
-    else setFavorites(prev => [scripture, ...prev]);
+    if (exists) setFavorites(prev => prev.filter(f => !(f.reference === scripture.reference && f.version === scripture.version))); else setFavorites(prev => [scripture, ...prev]);
   };
-  const isFavorited = (scripture) => {
-    if (!scripture) return false;
-    return favorites.some(f => f.reference === scripture.reference && f.version === scripture.version);
+  const isFavorited = (scripture) => { if (!scripture) return false; return favorites.some(f => f.reference === scripture.reference && f.version === scripture.version); };
+
+  // Helper to apply preset
+  const applyPreset = (presetName) => {
+      const p = THEMES[presetName];
+      if (p) { updateTheme('backgroundColor', p.backgroundColor); updateTheme('textColor', p.textColor); }
   };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-6xl mx-auto h-[calc(100vh-4rem)]">
       {/* LEFT COLUMN */}
       <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-full">
-        {/* ... (Left Column Same as Before) ... */}
         <div className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center shrink-0">
             <h2 className="text-slate-200 font-semibold flex items-center gap-2">
                 <img src="/logo.png" alt="Logo" className="h-6 w-auto object-contain" onError={(e) => e.target.style.display = 'none'} />
                 🎙️ Live Audio
             </h2>
-            <div className="flex items-center gap-3">
-              <select value={version} onChange={(e) => setVersion(e.target.value)} className="bg-slate-900 text-white text-sm font-bold py-1 px-3 rounded border border-slate-600 focus:outline-none focus:border-purple-500 transition-colors">
+            <div className="flex items-center gap-2">
+              {/* PRIMARY VERSION */}
+              <select value={version} onChange={(e) => setVersion(e.target.value)} className="bg-slate-900 text-white text-xs font-bold py-1 px-2 rounded border border-slate-600 focus:outline-none focus:border-purple-500">
                 <option value="KJV">KJV</option><option value="NIV">NIV</option><option value="NKJV">NKJV</option><option value="AMP">AMP</option><option value="ESV">ESV</option><option value="NLT">NLT</option><option value="GW">GW</option>
               </select>
-              <div className="flex items-center gap-2"><div className={`h-2 w-2 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} /><span className="text-xs text-slate-400 w-12">{isListening ? 'ON AIR' : 'OFF'}</span></div>
+              <span className="text-xs text-slate-500">+</span>
+              {/* NEW: SECONDARY VERSION */}
+              <select value={secondaryVersion} onChange={(e) => setSecondaryVersion(e.target.value)} className="bg-slate-900 text-blue-200 text-xs font-bold py-1 px-2 rounded border border-blue-900 focus:outline-none focus:border-blue-500">
+                <option value="NONE">None</option>
+                <option value="KJV">KJV</option><option value="NIV">NIV</option><option value="NKJV">NKJV</option><option value="AMP">AMP</option><option value="ESV">ESV</option><option value="NLT">NLT</option><option value="GW">GW</option>
+              </select>
+              <div className="flex items-center gap-1 ml-2"><div className={`h-2 w-2 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} /></div>
             </div>
         </div>
         <div className="flex-1 bg-slate-950 p-6 overflow-y-auto font-mono text-sm leading-relaxed min-h-[150px]">
@@ -203,9 +202,7 @@ const AudioMonitor = () => {
                 </form>
                 {showSuggestions && suggestions.length > 0 && (
                     <ul className="absolute bottom-full left-0 w-full bg-slate-800 border border-slate-600 rounded-lg shadow-xl mb-1 max-h-48 overflow-y-auto z-50">
-                        {suggestions.map((suggestion, index) => (
-                            <li key={suggestion} onClick={() => selectSuggestion(suggestion)} className={`px-3 py-2 text-sm cursor-pointer ${index === activeSuggestionIndex ? 'bg-purple-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>{suggestion}</li>
-                        ))}
+                        {suggestions.map((suggestion, index) => ( <li key={suggestion} onClick={() => selectSuggestion(suggestion)} className={`px-3 py-2 text-sm cursor-pointer ${index === activeSuggestionIndex ? 'bg-purple-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>{suggestion}</li> ))}
                     </ul>
                 )}
             </div>
@@ -229,7 +226,7 @@ const AudioMonitor = () => {
                     <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
                         {favorites.map((fav, idx) => (
                             <div key={idx} className="shrink-0 relative group">
-                                <button onClick={() => { projectScripture(fav); setActiveScripture(fav); addToHistory(fav); }} className="bg-purple-900/40 hover:bg-purple-800 border border-purple-500/30 text-purple-200 text-xs px-3 py-2 rounded-lg flex flex-col items-center min-w-[80px] cursor-pointer">
+                                <button onClick={() => { handleProject(fav); setActiveScripture(fav); addToHistory(fav); }} className="bg-purple-900/40 hover:bg-purple-800 border border-purple-500/30 text-purple-200 text-xs px-3 py-2 rounded-lg flex flex-col items-center min-w-[80px] cursor-pointer">
                                     <span className="font-bold">{fav.reference}</span>
                                     <span className="opacity-50 text-[10px]">{fav.version}</span>
                                 </button>
@@ -244,7 +241,6 @@ const AudioMonitor = () => {
 
       {/* RIGHT COLUMN */}
       <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-full">
-        {/* ... (Right Header Same as Before) ... */}
         <div className="bg-slate-800 p-4 border-b border-slate-700 flex flex-col gap-3 shrink-0">
             <div className="flex justify-between items-center">
                 <h2 className="text-purple-400 font-semibold flex items-center gap-2">✨ Detected Scriptures</h2>
@@ -253,14 +249,20 @@ const AudioMonitor = () => {
                     <button onClick={clearProjection} className="text-xs bg-slate-700 hover:bg-red-600 text-white px-3 py-1 rounded transition-colors cursor-pointer" title="[Esc]">Clear</button>
                 </div>
             </div>
+
             <div className="flex flex-wrap items-center gap-2 text-sm bg-slate-950 p-2 rounded border border-slate-800">
                 <select value={layoutMode} onChange={(e) => updateLayoutMode(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="LOWER_THIRD">Lower Third</option><option value="CENTER">Center</option></select>
-                <select value={aspectRatio} onChange={(e) => updateAspectRatio(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="16:9">16:9</option><option value="12:5">12:5 (Ultra)</option></select>
+                <select value={aspectRatio} onChange={(e) => updateAspectRatio(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="16:9">16:9</option><option value="12:5">12:5</option></select>
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
                 <select value={textAlign} onChange={(e) => updateTextAlign(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justify</option></select>
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
-                <div className="flex items-center gap-1" title="Font Size"><span className="text-xs text-slate-400">Aa</span><input type="range" min="30" max="120" value={fontSize} onChange={(e) => updateFontSize(parseInt(e.target.value))} className="w-16 accent-purple-500 cursor-pointer" /></div>
-                <div className="w-px h-4 bg-slate-700 mx-1"></div>
+
+                {/* NEW: THEME PRESETS */}
+                <select onChange={(e) => applyPreset(e.target.value)} defaultValue="" className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none">
+                    <option value="" disabled>Presets...</option>
+                    {Object.keys(THEMES).map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+
                 <div className="flex items-center gap-1">
                     <input type="color" value={theme.backgroundColor} onChange={(e) => updateTheme('backgroundColor', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none p-0 bg-transparent" title="Background" />
                     <input type="color" value={theme.textColor} onChange={(e) => updateTheme('textColor', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none p-0 bg-transparent" title="Text" />
@@ -270,59 +272,34 @@ const AudioMonitor = () => {
             </div>
         </div>
 
-        {/* MAIN CARD & HISTORY */}
+        {/* ... (Main Card & History - Use handleProject instead of projectScripture) ... */}
         <div className="flex-1 bg-slate-900 p-4 overflow-y-auto space-y-4">
             {activeScripture ? (
-                // --- COMPACT CARD (Modified: p-4 instead of p-6, text-xl) ---
                 <div className="bg-purple-900/20 border border-purple-500/50 p-4 rounded-xl animate-in fade-in slide-in-from-bottom-4 duration-500 relative flex flex-col">
                     <div className="flex justify-between items-start mb-2 shrink-0">
                         <div className="flex items-center gap-2">
                             <h3 className="text-xl font-bold text-white">{activeScripture.reference} <span className="text-xs font-normal text-purple-300">({activeScripture.version})</span></h3>
                             <button onClick={() => toggleFavorite(activeScripture)} className={`text-lg hover:scale-110 transition-transform ${isFavorited(activeScripture) ? 'text-yellow-400' : 'text-slate-600 hover:text-yellow-200'}`} title={isFavorited(activeScripture) ? "Remove from Favorites" : "Add to Favorites"}>★</button>
                         </div>
-                        <button onClick={() => projectScripture(activeScripture)} className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-1.5 rounded font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer text-sm" title="[Alt + P]">PROJECT 📺</button>
+                        <button onClick={() => handleProject(activeScripture)} className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-1.5 rounded font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer text-sm" title="[Alt + P]">PROJECT 📺</button>
                     </div>
-
-                    {/* FULL TEXT */}
-                    <p className="text-purple-200 text-base leading-relaxed font-serif mb-3 overflow-y-auto max-h-32 border-b border-purple-500/30 pb-3">
-                        "{activeScripture.text}"
-                    </p>
-
-                    {/* JUMP TO VERSE LIST */}
+                    <p className="text-purple-200 text-base leading-relaxed font-serif mb-3 overflow-y-auto max-h-32 border-b border-purple-500/30 pb-3">"{activeScripture.text}"</p>
                     {slides.length > 1 && (
                         <div className="flex-1 overflow-y-auto min-h-0 space-y-1.5 pr-1 custom-scrollbar">
                             <h4 className="text-[10px] font-bold text-purple-400 uppercase mb-1">Jump to Verse</h4>
                             {slides.map((slide, index) => (
-                                <button
-                                    key={index}
-                                    onClick={() => jumpToSlide(index)}
-                                    className={`w-full text-left px-3 py-2 rounded border transition-all duration-200 flex gap-2 group
-                                        ${currentSlideIndex === index
-                                            ? 'bg-purple-600 border-purple-400 text-white shadow'
-                                            : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:border-slate-500'
-                                        }
-                                    `}
-                                >
-                                    <span className={`font-bold font-mono text-xs ${currentSlideIndex === index ? 'text-purple-200' : 'text-slate-500'}`}>
-                                        {/* Parse verse number */}
-                                        {slide.reference.split(':')[1] || index + 1}
-                                    </span>
-                                    <span className="text-xs line-clamp-1 leading-snug">
-                                        {slide.text}
-                                    </span>
+                                <button key={index} onClick={() => jumpToSlide(index)} className={`w-full text-left px-3 py-2 rounded border transition-all duration-200 flex gap-2 group ${currentSlideIndex === index ? 'bg-purple-600 border-purple-400 text-white shadow' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:border-slate-500'}`}>
+                                    <span className={`font-bold font-mono text-xs ${currentSlideIndex === index ? 'text-purple-200' : 'text-slate-500'}`}>{slide.reference.split(':')[1] || index + 1}</span>
+                                    <span className="text-xs line-clamp-1 leading-snug">{slide.text}</span>
                                 </button>
                             ))}
                         </div>
                     )}
                 </div>
             ) : (
-                <div className="text-center text-slate-600 mt-20">
-                    <p>No scriptures detected yet...</p>
-                    <p className="text-sm mt-2">Try saying "John Chapter 3 Verse 16"</p>
-                </div>
+                <div className="text-center text-slate-600 mt-20"><p>No scriptures detected yet...</p><p className="text-sm mt-2">Try saying "John Chapter 3 Verse 16"</p></div>
             )}
 
-            {/* HISTORY */}
             {history.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-slate-800 shrink-0">
                     <div className="flex justify-between items-center mb-3">
@@ -333,7 +310,7 @@ const AudioMonitor = () => {
                         {history.slice(1).map((item, idx) => (
                             <div key={idx} className="mb-2 p-2 bg-slate-800/50 rounded flex justify-between items-center group hover:bg-slate-800 transition-colors">
                                 <div className="overflow-hidden mr-2"><span className="text-purple-400 font-bold text-xs block">{item.reference} ({item.version})</span><span className="text-slate-400 text-[10px] truncate block">{item.text}</span></div>
-                                <button onClick={() => { projectScripture(item); setActiveScripture(item); }} className="opacity-0 group-hover:opacity-100 bg-slate-700 hover:bg-purple-600 text-white text-[10px] px-2 py-1 rounded transition-all cursor-pointer">Show</button>
+                                <button onClick={() => { handleProject(item); setActiveScripture(item); }} className="opacity-0 group-hover:opacity-100 bg-slate-700 hover:bg-purple-600 text-white text-[10px] px-2 py-1 rounded transition-all cursor-pointer">Show</button>
                             </div>
                         ))}
                     </div>

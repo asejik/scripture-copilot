@@ -5,7 +5,7 @@ const OverlayView = () => {
   const { liveScripture, fontSize, theme, layoutMode, textAlign, aspectRatio } = useProjection();
 
   const [dynamicFontSize, setDynamicFontSize] = useState(fontSize);
-  const textRef = useRef(null);
+  const containerRef = useRef(null); // Ref for the text container (or grid)
   const boxRef = useRef(null);
 
   useEffect(() => {
@@ -13,33 +13,37 @@ const OverlayView = () => {
   }, [liveScripture, fontSize]);
 
   useLayoutEffect(() => {
-    if (!textRef.current || !boxRef.current) return;
+    if (!containerRef.current || !boxRef.current) return;
 
     const checkFit = () => {
-      const text = textRef.current;
+      const content = containerRef.current;
       const box = boxRef.current;
       let iterations = 0;
       let currentSize = fontSize;
 
+      // Shrink until content fits
       while (
-        (text.scrollHeight > box.clientHeight || text.scrollWidth > box.clientWidth) &&
-        currentSize > 20 &&
+        (content.scrollHeight > box.clientHeight || content.scrollWidth > box.clientWidth) &&
+        currentSize > 16 &&
         iterations < 100
       ) {
         currentSize -= 2;
-        text.style.fontSize = `${currentSize}px`;
+        content.style.fontSize = `${currentSize}px`;
         iterations++;
       }
     };
 
-    textRef.current.style.fontSize = `${fontSize}px`;
+    containerRef.current.style.fontSize = `${fontSize}px`;
     checkFit();
   }, [liveScripture, fontSize, layoutMode, aspectRatio, textAlign]);
 
   const isLowerThird = layoutMode === 'LOWER_THIRD';
   const isUltraWide = aspectRatio === '12:5';
 
-  // --- DYNAMIC BOUNDARIES ---
+  // CHECK FOR BILINGUAL
+  const hasSecondary = !!liveScripture?.secondaryText;
+
+  // --- STYLES ---
   const wrapperStyle = isLowerThird
     ? {
         position: 'absolute',
@@ -47,8 +51,6 @@ const OverlayView = () => {
         left: '50%',
         transform: 'translateX(-50%)',
         width: '90%',
-        // If UltraWide, make the lower third strip a bit shorter/sleeker?
-        // Or keep it standard. Let's keep it standard 280px for now.
         height: '280px',
         display: 'flex',
         flexDirection: 'column',
@@ -56,16 +58,12 @@ const OverlayView = () => {
         zIndex: 50
       }
     : {
-        // CENTER MODE LOGIC
         position: 'absolute',
         top: '50%',
         left: '50%',
         transform: 'translate(-50%, -50%)',
-
-        // 12:5 = Wider width, Shorter Height
         width: isUltraWide ? '95%' : '85%',
-        height: isUltraWide ? '60%' : '80%', // 60% mimics 1920x800 safe area inside 1080p
-
+        height: isUltraWide ? '60%' : '80%',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'flex-start',
@@ -88,7 +86,6 @@ const OverlayView = () => {
         display: 'flex',
         alignItems: 'flex-start',
         justifyContent: 'center',
-        // Adjust padding for ultra-wide to utilize horizontal space
         padding: isUltraWide ? '40px 60px' : '60px 40px',
         textAlign: 'center',
         overflow: 'hidden'
@@ -122,19 +119,43 @@ const OverlayView = () => {
             `}
             style={bodyStyle}
           >
-            <p
-                ref={textRef}
-                className="font-serif leading-tight drop-shadow-md transition-opacity duration-100 ease-out"
+            {/* CONTAINER FOR TEXT (Used for measuring auto-shrink) */}
+            <div
+                ref={containerRef}
                 style={{
                     color: theme.textColor,
                     width: '100%',
+                    height: '100%', // Ensure it fills the box
                     wordWrap: 'break-word',
                     margin: 0,
+                    // BILINGUAL GRID LOGIC
+                    display: hasSecondary ? 'grid' : 'block',
+                    gridTemplateColumns: hasSecondary ? '1fr 1fr' : '1fr',
+                    gap: hasSecondary ? '40px' : '0',
+                    alignItems: isLowerThird ? 'center' : 'start', // Vertical Align
                     textAlign: textAlign
                 }}
             >
-              {liveScripture.text}
-            </p>
+                {/* PRIMARY TEXT */}
+                <div className={`${hasSecondary ? "border-r border-slate-600 pr-5" : ""}`}>
+                    {hasSecondary && (
+                        <div className="text-[0.6em] opacity-70 mb-2 uppercase font-bold tracking-widest text-purple-300">
+                            {liveScripture.version}
+                        </div>
+                    )}
+                    <p className="font-serif leading-tight drop-shadow-md">{liveScripture.text}</p>
+                </div>
+
+                {/* SECONDARY TEXT */}
+                {hasSecondary && (
+                    <div className="pl-5">
+                        <div className="text-[0.6em] opacity-70 mb-2 uppercase font-bold tracking-widest text-purple-300">
+                            {liveScripture.secondaryVersion}
+                        </div>
+                        <p className="font-serif leading-tight drop-shadow-md opacity-90">{liveScripture.secondaryText}</p>
+                    </div>
+                )}
+            </div>
           </div>
         </div>
       )}

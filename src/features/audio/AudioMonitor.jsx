@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import useSpeechRecognition from '../../hooks/useSpeechRecognition';
 import useScriptureDetection from '../../hooks/useScriptureDetection';
 import { useProjection } from '../../context/ProjectionContext';
@@ -20,12 +20,20 @@ const AudioMonitor = () => {
   const [previewScripture, setPreviewScripture] = useState(null);
   const [isWakeLockActive, setIsWakeLockActive] = useState(false);
 
+  // --- AUTOCOMPLETE STATES ---
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
+
   const [favorites, setFavorites] = useState(() => {
     try { return JSON.parse(localStorage.getItem('saved_favorites')) || []; } catch (e) { return []; }
   });
 
   useEffect(() => { localStorage.setItem('bible_version', version); }, [version]);
   useEffect(() => { localStorage.setItem('saved_favorites', JSON.stringify(favorites)); }, [favorites]);
+
+  // Extract Book List from KJV (Standard 66 books)
+  const BOOK_LIST = useMemo(() => Object.keys(kjvData), []);
 
   useEffect(() => {
     let wakeLock = null;
@@ -63,14 +71,79 @@ const AudioMonitor = () => {
   const {
     projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex, totalSlides, liveScripture,
     fontSize, updateFontSize, theme, updateTheme, layoutMode, updateLayoutMode, textAlign, updateTextAlign,
-    aspectRatio, updateAspectRatio, resetSettings // Get Reset Function
+    aspectRatio, updateAspectRatio, resetSettings
   } = useProjection();
 
   const bottomRef = useRef(null);
   useEffect(() => { if (bottomRef.current) bottomRef.current.scrollIntoView({ behavior: 'smooth' }); }, [transcript, interimTranscript]);
+
+  // --- AUTOCOMPLETE LOGIC ---
+  const handleInputChange = (e) => {
+    const userInput = e.target.value;
+    setManualInput(userInput);
+
+    // Filter books only if user hasn't started typing numbers (chapter) yet
+    // Regex: Matches "Ge" or "1 Co" but stops matching if "1 Co 1"
+    if (userInput && !/\d+:/.test(userInput) && !/\d\s\d/.test(userInput)) {
+        // Clean up input for matching (allow "1 ch" to match "1 Chronicles")
+        const searchTerm = userInput.toLowerCase();
+
+        const filtered = BOOK_LIST.filter(book =>
+            book.toLowerCase().startsWith(searchTerm) ||
+            // Allow matching "1co" -> "1 Corinthians"
+            book.toLowerCase().replace(/\s/g, '').startsWith(searchTerm.replace(/\s/g, ''))
+        );
+
+        if (filtered.length > 0 && userInput.length > 0) {
+            setSuggestions(filtered);
+            setShowSuggestions(true);
+            setActiveSuggestionIndex(0);
+        } else {
+            setShowSuggestions(false);
+        }
+    } else {
+        setShowSuggestions(false);
+    }
+  };
+
+  const selectSuggestion = (book) => {
+    setManualInput(`${book} `); // Add space after book name
+    setSuggestions([]);
+    setShowSuggestions(false);
+    // Keep focus on input (managed by React usually, but ensures flow)
+  };
+
+  // --- KEYBOARD HANDLING ---
   useEffect(() => {
     const handleKeyDown = (e) => {
+        // If typing in input box
+        if (e.target.tagName === 'INPUT' && e.target.type === 'text') {
+            if (showSuggestions) {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setActiveSuggestionIndex(prev => (prev + 1) % suggestions.length);
+                    return;
+                }
+                if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setActiveSuggestionIndex(prev => (prev - 1 + suggestions.length) % suggestions.length);
+                    return;
+                }
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    selectSuggestion(suggestions[activeSuggestionIndex]);
+                    return;
+                }
+                if (e.key === 'Escape') {
+                    setShowSuggestions(false);
+                    return;
+                }
+            }
+        }
+
+        // Global Shortcuts (only if not handled above)
         if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && e.key !== 'Escape' && e.key !== 'Enter') return;
+
         switch(e.key) {
             case 'Escape': if (previewScripture) setPreviewScripture(null); else clearProjection(); break;
             case 'ArrowRight': nextSlide(); break;
@@ -82,7 +155,7 @@ const AudioMonitor = () => {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [previewScripture, detectedScripture, nextSlide, prevSlide, clearProjection, projectScripture]);
+  }, [previewScripture, detectedScripture, nextSlide, prevSlide, clearProjection, projectScripture, showSuggestions, suggestions, activeSuggestionIndex]);
 
   const handleManualSearch = (e) => {
     e.preventDefault(); setSearchError(null); setPreviewScripture(null);
@@ -117,7 +190,6 @@ const AudioMonitor = () => {
       <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-full">
         <div className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center shrink-0">
             <h2 className="text-slate-200 font-semibold flex items-center gap-2">
-                {/* LOGO AREA */}
                 <img src="/logo.png" alt="Logo" className="h-6 w-auto object-contain" onError={(e) => e.target.style.display = 'none'} />
                 🎙️ Live Audio
             </h2>
@@ -128,19 +200,49 @@ const AudioMonitor = () => {
               <div className="flex items-center gap-2"><div className={`h-2 w-2 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} /><span className="text-xs text-slate-400 w-12">{isListening ? 'ON AIR' : 'OFF'}</span></div>
             </div>
         </div>
+
         <div className="flex-1 bg-slate-950 p-6 overflow-y-auto font-mono text-sm leading-relaxed min-h-[150px]">
             {error && <div className="text-red-400 mb-2">{error}</div>} <span className="text-slate-300">{transcript}</span> <span className="text-emerald-400 italic"> {interimTranscript}</span> <div ref={bottomRef} />
         </div>
+
         <div className="p-4 bg-slate-800 border-t border-slate-700 flex flex-col gap-3 shrink-0">
             <div className="flex gap-3">
                 <button onClick={isListening ? stopListening : startListening} className={`px-4 py-2 rounded-lg font-medium text-white transition-colors cursor-pointer flex-1 ${isListening ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>{isListening ? 'Stop Mic' : 'Start Mic'}</button>
                 <button onClick={resetTranscript} className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 cursor-pointer">Clear Text</button>
             </div>
-            <form onSubmit={handleManualSearch} className="flex gap-2 relative">
-                <input type="text" value={manualInput} onChange={(e) => setManualInput(e.target.value)} placeholder="Type reference (e.g. John 3:16)..." className="flex-1 bg-slate-950 text-white border border-slate-600 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-500" />
-                <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm cursor-pointer">Search</button>
-            </form>
+
+            {/* MANUAL SEARCH WITH AUTOCOMPLETE */}
+            <div className="relative">
+                <form onSubmit={handleManualSearch} className="flex gap-2">
+                    <input
+                        type="text"
+                        value={manualInput}
+                        onChange={handleInputChange}
+                        placeholder="Type reference (e.g. John 3:16)..."
+                        className="flex-1 bg-slate-950 text-white border border-slate-600 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-500"
+                        autoComplete="off"
+                    />
+                    <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm cursor-pointer">Search</button>
+                </form>
+
+                {/* DROPDOWN LIST */}
+                {showSuggestions && suggestions.length > 0 && (
+                    <ul className="absolute bottom-full left-0 w-full bg-slate-800 border border-slate-600 rounded-lg shadow-xl mb-1 max-h-48 overflow-y-auto z-50">
+                        {suggestions.map((suggestion, index) => (
+                            <li
+                                key={suggestion}
+                                onClick={() => selectSuggestion(suggestion)}
+                                className={`px-3 py-2 text-sm cursor-pointer ${index === activeSuggestionIndex ? 'bg-purple-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}
+                            >
+                                {suggestion}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+
             {searchError && <div className="text-red-400 text-xs text-center">{searchError}</div>}
+
             {previewScripture && (
                 <div className="mt-2 bg-slate-700/50 border border-slate-600 rounded-lg p-3 animate-in fade-in slide-in-from-top-2 border-l-4 border-l-blue-500">
                     <div className="flex justify-between items-start mb-2">
@@ -154,6 +256,7 @@ const AudioMonitor = () => {
                     </div>
                 </div>
             )}
+
             {favorites.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-slate-700">
                     <h4 className="text-xs text-slate-400 uppercase font-bold mb-2">⭐ Quick Access / Favorites</h4>
@@ -175,6 +278,7 @@ const AudioMonitor = () => {
 
       {/* RIGHT COLUMN */}
       <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-full">
+        {/* ... (Same Right Column as before) ... */}
         <div className="bg-slate-800 p-4 border-b border-slate-700 flex flex-col gap-3 shrink-0">
             <div className="flex justify-between items-center">
                 <h2 className="text-purple-400 font-semibold flex items-center gap-2">✨ Detected Scriptures</h2>
@@ -196,16 +300,8 @@ const AudioMonitor = () => {
                     <input type="color" value={theme.backgroundColor} onChange={(e) => updateTheme('backgroundColor', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none p-0 bg-transparent" title="Background" />
                     <input type="color" value={theme.textColor} onChange={(e) => updateTheme('textColor', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none p-0 bg-transparent" title="Text" />
                 </div>
-
-                {/* NEW: RESET BUTTON */}
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
-                <button
-                    onClick={() => { if(confirm('Reset all theme settings to default?')) resetSettings(); }}
-                    className="text-xs bg-red-900/30 hover:bg-red-900 text-red-400 hover:text-white px-2 py-1 rounded transition-colors cursor-pointer"
-                    title="Reset to Factory Defaults"
-                >
-                    ⟳ Reset
-                </button>
+                <button onClick={() => { if(confirm('Reset all theme settings to default?')) resetSettings(); }} className="text-xs bg-red-900/30 hover:bg-red-900 text-red-400 hover:text-white px-2 py-1 rounded transition-colors cursor-pointer" title="Reset to Factory Defaults">⟳ Reset</button>
             </div>
         </div>
 

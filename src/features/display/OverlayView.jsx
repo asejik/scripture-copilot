@@ -2,7 +2,7 @@ import React, { useRef, useLayoutEffect, useState, useEffect } from 'react';
 import { useProjection } from '../../context/ProjectionContext';
 
 const OverlayView = () => {
-  const { liveScripture, fontSize, theme, layoutMode, textAlign } = useProjection(); // Get textAlign
+  const { liveScripture, fontSize, theme, layoutMode, textAlign, aspectRatio } = useProjection();
 
   const [dynamicFontSize, setDynamicFontSize] = useState(fontSize);
   const textRef = useRef(null);
@@ -18,7 +18,6 @@ const OverlayView = () => {
     const checkFit = () => {
       const text = textRef.current;
       const box = boxRef.current;
-
       let iterations = 0;
       let currentSize = fontSize;
 
@@ -35,11 +34,12 @@ const OverlayView = () => {
 
     textRef.current.style.fontSize = `${fontSize}px`;
     checkFit();
-
-  }, [liveScripture, fontSize, layoutMode]);
+  }, [liveScripture, fontSize, layoutMode, aspectRatio, textAlign]);
 
   const isLowerThird = layoutMode === 'LOWER_THIRD';
+  const isUltraWide = aspectRatio === '12:5';
 
+  // --- DYNAMIC BOUNDARIES ---
   const wrapperStyle = isLowerThird
     ? {
         position: 'absolute',
@@ -47,6 +47,8 @@ const OverlayView = () => {
         left: '50%',
         transform: 'translateX(-50%)',
         width: '90%',
+        // If UltraWide, make the lower third strip a bit shorter/sleeker?
+        // Or keep it standard. Let's keep it standard 280px for now.
         height: '280px',
         display: 'flex',
         flexDirection: 'column',
@@ -54,12 +56,16 @@ const OverlayView = () => {
         zIndex: 50
       }
     : {
+        // CENTER MODE LOGIC
         position: 'absolute',
         top: '50%',
         left: '50%',
         transform: 'translate(-50%, -50%)',
-        width: '85%',
-        height: '80%',
+
+        // 12:5 = Wider width, Shorter Height
+        width: isUltraWide ? '95%' : '85%',
+        height: isUltraWide ? '60%' : '80%', // 60% mimics 1920x800 safe area inside 1080p
+
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'flex-start',
@@ -82,7 +88,8 @@ const OverlayView = () => {
         display: 'flex',
         alignItems: 'flex-start',
         justifyContent: 'center',
-        padding: '60px 40px',
+        // Adjust padding for ultra-wide to utilize horizontal space
+        padding: isUltraWide ? '40px 60px' : '60px 40px',
         textAlign: 'center',
         overflow: 'hidden'
       };
@@ -92,10 +99,9 @@ const OverlayView = () => {
         className="min-h-screen w-full relative overflow-hidden transition-colors duration-300"
         style={{ backgroundColor: theme.backgroundColor }}
     >
-
       {!liveScripture ? (
         <div className="absolute top-0 left-0 p-4 text-white/50 font-mono text-sm">
-          ● Projector Ready ({layoutMode}). Waiting for input...
+          ● Projector Ready ({layoutMode} - {aspectRatio}). Waiting for input...
         </div>
       ) : (
         <div style={wrapperStyle} className="animate-in zoom-in-95 fade-in duration-300">
@@ -124,7 +130,6 @@ const OverlayView = () => {
                     width: '100%',
                     wordWrap: 'break-word',
                     margin: 0,
-                    // APPLY TEXT ALIGNMENT HERE
                     textAlign: textAlign
                 }}
             >
@@ -136,5 +141,4 @@ const OverlayView = () => {
     </div>
   );
 };
-
 export default OverlayView;

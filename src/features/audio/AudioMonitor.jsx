@@ -19,9 +19,7 @@ const AudioMonitor = () => {
   const [searchError, setSearchError] = useState(null);
   const [previewScripture, setPreviewScripture] = useState(null);
 
-  useEffect(() => {
-    localStorage.setItem('bible_version', version);
-  }, [version]);
+  useEffect(() => { localStorage.setItem('bible_version', version); }, [version]);
 
   const getBibleData = () => {
     switch(version) {
@@ -37,73 +35,25 @@ const AudioMonitor = () => {
   };
 
   const currentBibleData = getBibleData();
-
+  const { isListening, transcript, interimTranscript, startListening, stopListening, resetTranscript, error } = useSpeechRecognition();
+  const { detectedScripture, history, clearHistory } = useScriptureDetection(transcript + ' ' + interimTranscript, currentBibleData, version);
   const {
-    isListening,
-    transcript,
-    interimTranscript,
-    startListening,
-    stopListening,
-    resetTranscript,
-    error,
-  } = useSpeechRecognition();
-
-  const { detectedScripture, history, clearHistory } = useScriptureDetection(
-    transcript + ' ' + interimTranscript,
-    currentBibleData,
-    version
-  );
-
-  const {
-    projectScripture,
-    clearProjection,
-    nextSlide,
-    prevSlide,
-    currentSlideIndex,
-    totalSlides,
-    liveScripture,
-    fontSize,
-    updateFontSize,
-    theme,
-    updateTheme,
-    layoutMode,
-    updateLayoutMode,
-    textAlign,      // Get Alignment
-    updateTextAlign // Get Updater
+    projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex, totalSlides, liveScripture,
+    fontSize, updateFontSize, theme, updateTheme, layoutMode, updateLayoutMode, textAlign, updateTextAlign,
+    aspectRatio, updateAspectRatio // Get Aspect Ratio
   } = useProjection();
 
   const bottomRef = useRef(null);
-
-  useEffect(() => {
-    if (bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [transcript, interimTranscript]);
-
+  useEffect(() => { if (bottomRef.current) bottomRef.current.scrollIntoView({ behavior: 'smooth' }); }, [transcript, interimTranscript]);
   useEffect(() => {
     const handleKeyDown = (e) => {
         if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && e.key !== 'Escape' && e.key !== 'Enter') return;
-
         switch(e.key) {
-            case 'Escape':
-                if (previewScripture) setPreviewScripture(null);
-                else clearProjection();
-                break;
-            case 'ArrowRight':
-                nextSlide();
-                break;
-            case 'ArrowLeft':
-                prevSlide();
-                break;
-            case 'Enter':
-                if (previewScripture && !e.shiftKey) {
-                    e.preventDefault();
-                    confirmProjection();
-                }
-                break;
-            case 'p':
-                if (e.altKey && detectedScripture) projectScripture(detectedScripture);
-                break;
+            case 'Escape': if (previewScripture) setPreviewScripture(null); else clearProjection(); break;
+            case 'ArrowRight': nextSlide(); break;
+            case 'ArrowLeft': prevSlide(); break;
+            case 'Enter': if (previewScripture && !e.shiftKey) { e.preventDefault(); confirmProjection(); } break;
+            case 'p': if (e.altKey && detectedScripture) projectScripture(detectedScripture); break;
             default: break;
         }
     };
@@ -112,81 +62,39 @@ const AudioMonitor = () => {
   }, [previewScripture, detectedScripture, nextSlide, prevSlide, clearProjection, projectScripture]);
 
   const handleManualSearch = (e) => {
-    e.preventDefault();
-    setSearchError(null);
-    setPreviewScripture(null);
+    e.preventDefault(); setSearchError(null); setPreviewScripture(null);
     if (!manualInput.trim()) return;
     const cleanText = normalizeSpokenText(manualInput);
     const result = parseScripture(cleanText, currentBibleData, version);
-    if (result) setPreviewScripture(result);
-    else setSearchError(`Scripture not found in ${version}. Check spelling.`);
+    if (result) setPreviewScripture(result); else setSearchError(`Scripture not found in ${version}. Check spelling.`);
   };
-
-  const confirmProjection = () => {
-    if (previewScripture) {
-        projectScripture(previewScripture);
-        setPreviewScripture(null);
-        setManualInput('');
-    }
-  };
-
+  const confirmProjection = () => { if (previewScripture) { projectScripture(previewScripture); setPreviewScripture(null); setManualInput(''); }};
   const exportHistory = () => {
     if (history.length === 0) return;
-    const date = new Date().toLocaleDateString();
-    let content = `SERMON SCRIPTURE NOTES - ${date}\n\n`;
-    [...history].reverse().forEach((item, index) => {
-        content += `${index + 1}. ${item.reference} (${item.version})\n`;
-        content += `"${item.text}"\n\n`;
-    });
-    const element = document.createElement("a");
-    const file = new Blob([content], {type: 'text/plain'});
-    element.href = URL.createObjectURL(file);
-    element.download = `sermon-notes-${Date.now()}.txt`;
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
+    const date = new Date().toLocaleDateString(); let content = `SERMON SCRIPTURE NOTES - ${date}\n\n`;
+    [...history].reverse().forEach((item, index) => { content += `${index + 1}. ${item.reference} (${item.version})\n`; content += `"${item.text}"\n\n`; });
+    const element = document.createElement("a"); const file = new Blob([content], {type: 'text/plain'});
+    element.href = URL.createObjectURL(file); element.download = `sermon-notes-${Date.now()}.txt`;
+    document.body.appendChild(element); element.click(); document.body.removeChild(element);
   };
-
-  const handlePreviewEdit = (e) => {
-    setPreviewScripture(prev => ({ ...prev, text: e.target.value, verseList: null }));
-  };
+  const handlePreviewEdit = (e) => { setPreviewScripture(prev => ({ ...prev, text: e.target.value, verseList: null })); };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-6xl mx-auto">
-
       {/* LEFT COLUMN */}
       <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-[600px]">
-        {/* ... (Left Header & Body - No Changes) ... */}
         <div className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center">
             <h2 className="text-slate-200 font-semibold flex items-center gap-2">🎙️ Live Audio</h2>
             <div className="flex items-center gap-3">
-              <select
-                value={version}
-                onChange={(e) => setVersion(e.target.value)}
-                className="bg-slate-900 text-white text-sm font-bold py-1 px-3 rounded border border-slate-600 focus:outline-none focus:border-purple-500 transition-colors"
-              >
-                <option value="KJV">KJV</option>
-                <option value="NIV">NIV</option>
-                <option value="NKJV">NKJV</option>
-                <option value="AMP">AMP</option>
-                <option value="ESV">ESV</option>
-                <option value="NLT">NLT</option>
-                <option value="GW">GW</option>
+              <select value={version} onChange={(e) => setVersion(e.target.value)} className="bg-slate-900 text-white text-sm font-bold py-1 px-3 rounded border border-slate-600 focus:outline-none focus:border-purple-500 transition-colors">
+                <option value="KJV">KJV</option><option value="NIV">NIV</option><option value="NKJV">NKJV</option><option value="AMP">AMP</option><option value="ESV">ESV</option><option value="NLT">NLT</option><option value="GW">GW</option>
               </select>
-              <div className="flex items-center gap-2">
-                  <div className={`h-2 w-2 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-                  <span className="text-xs text-slate-400 w-12">{isListening ? 'ON AIR' : 'OFF'}</span>
-              </div>
+              <div className="flex items-center gap-2"><div className={`h-2 w-2 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} /><span className="text-xs text-slate-400 w-12">{isListening ? 'ON AIR' : 'OFF'}</span></div>
             </div>
         </div>
-
         <div className="flex-1 bg-slate-950 p-6 overflow-y-auto font-mono text-sm leading-relaxed">
-            {error && <div className="text-red-400 mb-2">{error}</div>}
-            <span className="text-slate-300">{transcript}</span>
-            <span className="text-emerald-400 italic"> {interimTranscript}</span>
-            <div ref={bottomRef} />
+            {error && <div className="text-red-400 mb-2">{error}</div>} <span className="text-slate-300">{transcript}</span> <span className="text-emerald-400 italic"> {interimTranscript}</span> <div ref={bottomRef} />
         </div>
-
         <div className="p-4 bg-slate-800 border-t border-slate-700 flex flex-col gap-3">
             <div className="flex gap-3">
                 <button onClick={isListening ? stopListening : startListening} className={`px-4 py-2 rounded-lg font-medium text-white transition-colors cursor-pointer flex-1 ${isListening ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>{isListening ? 'Stop Mic' : 'Start Mic'}</button>
@@ -213,7 +121,7 @@ const AudioMonitor = () => {
         </div>
       </div>
 
-      {/* RIGHT COLUMN: STYLING & LAYOUT */}
+      {/* RIGHT COLUMN */}
       <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-[600px]">
         <div className="bg-slate-800 p-4 border-b border-slate-700 flex flex-col gap-3">
             <div className="flex justify-between items-center">
@@ -223,34 +131,27 @@ const AudioMonitor = () => {
 
             <div className="flex flex-wrap items-center gap-2 text-sm bg-slate-950 p-2 rounded border border-slate-800">
                 {/* 1. View Mode */}
-                <select
-                    value={layoutMode}
-                    onChange={(e) => updateLayoutMode(e.target.value)}
-                    className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"
-                    title="Change Projector Layout"
-                >
-                    <option value="LOWER_THIRD">Lower Third (Live)</option>
-                    <option value="CENTER">Center Screen (Stage)</option>
+                <select value={layoutMode} onChange={(e) => updateLayoutMode(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none">
+                    <option value="LOWER_THIRD">Lower Third</option>
+                    <option value="CENTER">Center</option>
+                </select>
+
+                {/* 2. Aspect Ratio Selector (NEW) */}
+                <select value={aspectRatio} onChange={(e) => updateAspectRatio(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none">
+                    <option value="16:9">16:9</option>
+                    <option value="12:5">12:5 (Ultra)</option>
                 </select>
 
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
 
-                {/* 2. Alignment Selector */}
-                <select
-                    value={textAlign}
-                    onChange={(e) => updateTextAlign(e.target.value)}
-                    className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"
-                    title="Text Alignment"
-                >
-                    <option value="left">Left</option>
-                    <option value="center">Center</option>
-                    <option value="right">Right</option>
-                    <option value="justify">Justify</option>
+                {/* 3. Alignment */}
+                <select value={textAlign} onChange={(e) => updateTextAlign(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none">
+                    <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justify</option>
                 </select>
 
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
 
-                {/* 3. Font Size */}
+                {/* 4. Font Size */}
                 <div className="flex items-center gap-1" title="Font Size">
                     <span className="text-xs text-slate-400">Aa</span>
                     <input type="range" min="30" max="120" value={fontSize} onChange={(e) => updateFontSize(parseInt(e.target.value))} className="w-16 accent-purple-500 cursor-pointer" />
@@ -258,10 +159,10 @@ const AudioMonitor = () => {
 
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
 
-                {/* 4. Colors */}
+                {/* 5. Colors */}
                 <div className="flex items-center gap-1">
-                    <input type="color" value={theme.backgroundColor} onChange={(e) => updateTheme('backgroundColor', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none p-0 bg-transparent" title="Background Color" />
-                    <input type="color" value={theme.textColor} onChange={(e) => updateTheme('textColor', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none p-0 bg-transparent" title="Text Color" />
+                    <input type="color" value={theme.backgroundColor} onChange={(e) => updateTheme('backgroundColor', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none p-0 bg-transparent" title="Background" />
+                    <input type="color" value={theme.textColor} onChange={(e) => updateTheme('textColor', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none p-0 bg-transparent" title="Text" />
                 </div>
             </div>
         </div>
@@ -288,22 +189,15 @@ const AudioMonitor = () => {
                     <p className="text-sm mt-2">Try saying "John Chapter 3 Verse 16"</p>
                 </div>
             )}
-
             {history.length > 0 && (
                 <div className="mt-8 pt-4 border-t border-slate-800">
                     <div className="flex justify-between items-center mb-3">
                         <h4 className="text-slate-500 text-xs uppercase font-bold">Session History</h4>
-                        <div className="flex gap-2">
-                            <button onClick={exportHistory} className="text-xs bg-blue-900 hover:bg-blue-700 text-blue-200 px-2 py-1 rounded transition-colors cursor-pointer">⬇ Export</button>
-                            <button onClick={clearHistory} className="text-xs bg-slate-800 hover:bg-red-900 text-slate-400 hover:text-red-200 px-2 py-1 rounded transition-colors cursor-pointer">🗑 Clear</button>
-                        </div>
+                        <div className="flex gap-2"><button onClick={exportHistory} className="text-xs bg-blue-900 hover:bg-blue-700 text-blue-200 px-2 py-1 rounded transition-colors cursor-pointer">⬇ Export</button><button onClick={clearHistory} className="text-xs bg-slate-800 hover:bg-red-900 text-slate-400 hover:text-red-200 px-2 py-1 rounded transition-colors cursor-pointer">🗑 Clear</button></div>
                     </div>
                     {history.slice(1).map((item, idx) => (
                         <div key={idx} className="mb-3 p-3 bg-slate-800/50 rounded flex justify-between items-center group hover:bg-slate-800 transition-colors">
-                            <div className="overflow-hidden mr-2">
-                                <span className="text-purple-400 font-bold text-sm block">{item.reference} ({item.version})</span>
-                                <span className="text-slate-400 text-xs truncate block">{item.text}</span>
-                            </div>
+                            <div className="overflow-hidden mr-2"><span className="text-purple-400 font-bold text-sm block">{item.reference} ({item.version})</span><span className="text-slate-400 text-xs truncate block">{item.text}</span></div>
                             <button onClick={() => projectScripture(item)} className="opacity-0 group-hover:opacity-100 bg-slate-700 hover:bg-purple-600 text-white text-xs px-3 py-1 rounded transition-all cursor-pointer">Show</button>
                         </div>
                     ))}
@@ -314,5 +208,4 @@ const AudioMonitor = () => {
     </div>
   );
 };
-
 export default AudioMonitor;

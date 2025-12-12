@@ -3,7 +3,6 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 const ProjectionContext = createContext();
 
 export const ProjectionProvider = ({ children }) => {
-  // 1. Load Saved Data
   const [liveScripture, setLiveScripture] = useState(() => {
     try { return JSON.parse(localStorage.getItem('current_scripture')); } catch (e) { return null; }
   });
@@ -36,7 +35,9 @@ export const ProjectionProvider = ({ children }) => {
         }
         return [{ ...scripture, reference: ref }];
     }
-    const VERSES_PER_SLIDE = 2;
+
+    // CHANGE: 1 Verse per slide (Requested Update)
+    const VERSES_PER_SLIDE = 1;
     const chunks = [];
     const baseRef = scripture.reference.split(':')[0];
     const version = scripture.version;
@@ -46,6 +47,7 @@ export const ProjectionProvider = ({ children }) => {
         const slideText = chunk.map(v => `${v.verse} ${v.text}`).join(' ');
         const startV = chunk[0].verse;
         const endV = chunk[chunk.length - 1].verse;
+
         let ref = `${baseRef}:${startV}${startV !== endV ? '-' + endV : ''}`;
         if (version) ref += ` (${version})`;
 
@@ -90,7 +92,6 @@ export const ProjectionProvider = ({ children }) => {
     return () => channel.close();
   }, []);
 
-  // --- ACTIONS ---
   const broadcast = (type, payload) => {
     const channel = new BroadcastChannel(channelName);
     channel.postMessage({ type, payload });
@@ -100,12 +101,20 @@ export const ProjectionProvider = ({ children }) => {
   const projectScripture = (scripture) => {
     const s = createSlides(scripture);
     setSlides(s); setCurrentSlideIndex(0);
-    setLiveScripture(s[0]);
-    try { localStorage.setItem('current_scripture', JSON.stringify(s[0])); } catch(e){}
-    broadcast('UPDATE_SLIDE', s[0]);
+    updateProjection(s[0]);
   };
+
   const nextSlide = () => { if (currentSlideIndex < slides.length - 1) { const i = currentSlideIndex + 1; setCurrentSlideIndex(i); updateProjection(slides[i]); }};
   const prevSlide = () => { if (currentSlideIndex > 0) { const i = currentSlideIndex - 1; setCurrentSlideIndex(i); updateProjection(slides[i]); }};
+
+  // NEW: Jump to specific slide
+  const jumpToSlide = (index) => {
+    if (index >= 0 && index < slides.length) {
+        setCurrentSlideIndex(index);
+        updateProjection(slides[index]);
+    }
+  };
+
   const updateProjection = (s) => { setLiveScripture(s); try { localStorage.setItem('current_scripture', JSON.stringify(s)); } catch(e){} broadcast('UPDATE_SLIDE', s); };
   const clearProjection = () => { setLiveScripture(null); setSlides([]); try { localStorage.removeItem('current_scripture'); } catch(e){} broadcast('CLEAR_SCREEN'); };
   const updateFontSize = (s) => { setFontSize(s); try { localStorage.setItem('projection_font_size', s); } catch(e){} broadcast('UPDATE_STYLE', { fontSize: s }); };
@@ -113,29 +122,19 @@ export const ProjectionProvider = ({ children }) => {
   const updateLayoutMode = (m) => { setLayoutMode(m); try { localStorage.setItem('projection_layout_mode', m); } catch(e){} broadcast('UPDATE_LAYOUT', { layoutMode: m }); };
   const updateTextAlign = (a) => { setTextAlign(a); try { localStorage.setItem('projection_text_align', a); } catch(e){} broadcast('UPDATE_ALIGN', { textAlign: a }); };
   const updateAspectRatio = (r) => { setAspectRatio(r); try { localStorage.setItem('projection_aspect_ratio', r); } catch(e){} broadcast('UPDATE_ASPECT', { aspectRatio: r }); };
-
-  // NEW: Factory Reset Action
   const resetSettings = () => {
-    // 1. Reset Values
-    updateFontSize(60);
-    updateLayoutMode('LOWER_THIRD');
-    updateTextAlign('center');
-    updateAspectRatio('16:9');
-
-    // 2. Reset Theme manually since updateTheme takes key/value
+    updateFontSize(60); updateLayoutMode('LOWER_THIRD'); updateTextAlign('center'); updateAspectRatio('16:9');
     const defaultTheme = { backgroundColor: '#00b140', textColor: '#ffffff' };
-    setTheme(defaultTheme);
-    try { localStorage.setItem('projection_theme', JSON.stringify(defaultTheme)); } catch(e){}
-    broadcast('UPDATE_THEME', { theme: defaultTheme });
+    setTheme(defaultTheme); try { localStorage.setItem('projection_theme', JSON.stringify(defaultTheme)); } catch(e){} broadcast('UPDATE_THEME', { theme: defaultTheme });
   };
 
   return (
     <ProjectionContext.Provider value={{
         liveScripture, projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex,
-        totalSlides: slides.length, fontSize, updateFontSize, theme, updateTheme,
+        totalSlides: slides.length, slides, jumpToSlide, // EXPORTED SLIDES & JUMP
+        fontSize, updateFontSize, theme, updateTheme,
         layoutMode, updateLayoutMode, textAlign, updateTextAlign,
-        aspectRatio, updateAspectRatio,
-        resetSettings // Export Reset
+        aspectRatio, updateAspectRatio, resetSettings
     }}>
       {children}
     </ProjectionContext.Provider>

@@ -20,7 +20,7 @@ const AudioMonitor = () => {
   const [previewScripture, setPreviewScripture] = useState(null);
   const [isWakeLockActive, setIsWakeLockActive] = useState(false);
 
-  // --- AUTOCOMPLETE STATES ---
+  // AutoComplete
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
@@ -32,7 +32,6 @@ const AudioMonitor = () => {
   useEffect(() => { localStorage.setItem('bible_version', version); }, [version]);
   useEffect(() => { localStorage.setItem('saved_favorites', JSON.stringify(favorites)); }, [favorites]);
 
-  // Extract Book List from KJV (Standard 66 books)
   const BOOK_LIST = useMemo(() => Object.keys(kjvData), []);
 
   useEffect(() => {
@@ -67,9 +66,21 @@ const AudioMonitor = () => {
 
   const currentBibleData = getBibleData();
   const { isListening, transcript, interimTranscript, startListening, stopListening, resetTranscript, error } = useSpeechRecognition();
-  const { detectedScripture, history, clearHistory } = useScriptureDetection(transcript + ' ' + interimTranscript, currentBibleData, version);
+
+  // NOTE: detectedScripture comes from voice, but we will also manually update it when searching
+  const { detectedScripture: voiceDetected, history, clearHistory } = useScriptureDetection(transcript + ' ' + interimTranscript, currentBibleData, version);
+
+  // Local state to hold EITHER voice detected OR manual searched scripture
+  const [activeScripture, setActiveScripture] = useState(null);
+
+  // Sync voice detection to activeScripture
+  useEffect(() => {
+    if (voiceDetected) setActiveScripture(voiceDetected);
+  }, [voiceDetected]);
+
   const {
-    projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex, totalSlides, liveScripture,
+    projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex,
+    slides, jumpToSlide, // NEW: Access slides directly
     fontSize, updateFontSize, theme, updateTheme, layoutMode, updateLayoutMode, textAlign, updateTextAlign,
     aspectRatio, updateAspectRatio, resetSettings
   } = useProjection();
@@ -77,85 +88,40 @@ const AudioMonitor = () => {
   const bottomRef = useRef(null);
   useEffect(() => { if (bottomRef.current) bottomRef.current.scrollIntoView({ behavior: 'smooth' }); }, [transcript, interimTranscript]);
 
-  // --- AUTOCOMPLETE LOGIC ---
   const handleInputChange = (e) => {
     const userInput = e.target.value;
     setManualInput(userInput);
-
-    // Filter books only if user hasn't started typing numbers (chapter) yet
-    // Regex: Matches "Ge" or "1 Co" but stops matching if "1 Co 1"
     if (userInput && !/\d+:/.test(userInput) && !/\d\s\d/.test(userInput)) {
-        // Clean up input for matching (allow "1 ch" to match "1 Chronicles")
         const searchTerm = userInput.toLowerCase();
-
-        const filtered = BOOK_LIST.filter(book =>
-            book.toLowerCase().startsWith(searchTerm) ||
-            // Allow matching "1co" -> "1 Corinthians"
-            book.toLowerCase().replace(/\s/g, '').startsWith(searchTerm.replace(/\s/g, ''))
-        );
-
-        if (filtered.length > 0 && userInput.length > 0) {
-            setSuggestions(filtered);
-            setShowSuggestions(true);
-            setActiveSuggestionIndex(0);
-        } else {
-            setShowSuggestions(false);
-        }
-    } else {
-        setShowSuggestions(false);
-    }
+        const filtered = BOOK_LIST.filter(book => book.toLowerCase().startsWith(searchTerm) || book.toLowerCase().replace(/\s/g, '').startsWith(searchTerm.replace(/\s/g, '')));
+        if (filtered.length > 0 && userInput.length > 0) { setSuggestions(filtered); setShowSuggestions(true); setActiveSuggestionIndex(0); } else { setShowSuggestions(false); }
+    } else { setShowSuggestions(false); }
   };
+  const selectSuggestion = (book) => { setManualInput(`${book} `); setSuggestions([]); setShowSuggestions(false); };
 
-  const selectSuggestion = (book) => {
-    setManualInput(`${book} `); // Add space after book name
-    setSuggestions([]);
-    setShowSuggestions(false);
-    // Keep focus on input (managed by React usually, but ensures flow)
-  };
-
-  // --- KEYBOARD HANDLING ---
   useEffect(() => {
     const handleKeyDown = (e) => {
-        // If typing in input box
         if (e.target.tagName === 'INPUT' && e.target.type === 'text') {
             if (showSuggestions) {
-                if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    setActiveSuggestionIndex(prev => (prev + 1) % suggestions.length);
-                    return;
-                }
-                if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    setActiveSuggestionIndex(prev => (prev - 1 + suggestions.length) % suggestions.length);
-                    return;
-                }
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    selectSuggestion(suggestions[activeSuggestionIndex]);
-                    return;
-                }
-                if (e.key === 'Escape') {
-                    setShowSuggestions(false);
-                    return;
-                }
+                if (e.key === 'ArrowDown') { e.preventDefault(); setActiveSuggestionIndex(prev => (prev + 1) % suggestions.length); return; }
+                if (e.key === 'ArrowUp') { e.preventDefault(); setActiveSuggestionIndex(prev => (prev - 1 + suggestions.length) % suggestions.length); return; }
+                if (e.key === 'Enter') { e.preventDefault(); selectSuggestion(suggestions[activeSuggestionIndex]); return; }
+                if (e.key === 'Escape') { setShowSuggestions(false); return; }
             }
         }
-
-        // Global Shortcuts (only if not handled above)
         if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && e.key !== 'Escape' && e.key !== 'Enter') return;
-
         switch(e.key) {
             case 'Escape': if (previewScripture) setPreviewScripture(null); else clearProjection(); break;
             case 'ArrowRight': nextSlide(); break;
             case 'ArrowLeft': prevSlide(); break;
             case 'Enter': if (previewScripture && !e.shiftKey) { e.preventDefault(); confirmProjection(); } break;
-            case 'p': if (e.altKey && detectedScripture) projectScripture(detectedScripture); break;
+            case 'p': if (e.altKey && activeScripture) projectScripture(activeScripture); break;
             default: break;
         }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [previewScripture, detectedScripture, nextSlide, prevSlide, clearProjection, projectScripture, showSuggestions, suggestions, activeSuggestionIndex]);
+  }, [previewScripture, activeScripture, nextSlide, prevSlide, clearProjection, projectScripture, showSuggestions, suggestions, activeSuggestionIndex]);
 
   const handleManualSearch = (e) => {
     e.preventDefault(); setSearchError(null); setPreviewScripture(null);
@@ -164,7 +130,16 @@ const AudioMonitor = () => {
     const result = parseScripture(cleanText, currentBibleData, version);
     if (result) setPreviewScripture(result); else setSearchError(`Scripture not found in ${version}. Check spelling.`);
   };
-  const confirmProjection = () => { if (previewScripture) { projectScripture(previewScripture); setPreviewScripture(null); setManualInput(''); }};
+
+  const confirmProjection = () => {
+    if (previewScripture) {
+        projectScripture(previewScripture);
+        setActiveScripture(previewScripture); // FORCE UI UPDATE
+        setPreviewScripture(null);
+        setManualInput('');
+    }
+  };
+
   const exportHistory = () => {
     if (history.length === 0) return;
     const date = new Date().toLocaleDateString(); let content = `SERMON SCRIPTURE NOTES - ${date}\n\n`;
@@ -211,38 +186,20 @@ const AudioMonitor = () => {
                 <button onClick={resetTranscript} className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 cursor-pointer">Clear Text</button>
             </div>
 
-            {/* MANUAL SEARCH WITH AUTOCOMPLETE */}
             <div className="relative">
                 <form onSubmit={handleManualSearch} className="flex gap-2">
-                    <input
-                        type="text"
-                        value={manualInput}
-                        onChange={handleInputChange}
-                        placeholder="Type reference (e.g. John 3:16)..."
-                        className="flex-1 bg-slate-950 text-white border border-slate-600 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-500"
-                        autoComplete="off"
-                    />
+                    <input type="text" value={manualInput} onChange={handleInputChange} placeholder="Type reference (e.g. John 3:16)..." className="flex-1 bg-slate-950 text-white border border-slate-600 rounded px-3 py-2 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-500" autoComplete="off" />
                     <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm cursor-pointer">Search</button>
                 </form>
-
-                {/* DROPDOWN LIST */}
                 {showSuggestions && suggestions.length > 0 && (
                     <ul className="absolute bottom-full left-0 w-full bg-slate-800 border border-slate-600 rounded-lg shadow-xl mb-1 max-h-48 overflow-y-auto z-50">
                         {suggestions.map((suggestion, index) => (
-                            <li
-                                key={suggestion}
-                                onClick={() => selectSuggestion(suggestion)}
-                                className={`px-3 py-2 text-sm cursor-pointer ${index === activeSuggestionIndex ? 'bg-purple-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}
-                            >
-                                {suggestion}
-                            </li>
+                            <li key={suggestion} onClick={() => selectSuggestion(suggestion)} className={`px-3 py-2 text-sm cursor-pointer ${index === activeSuggestionIndex ? 'bg-purple-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>{suggestion}</li>
                         ))}
                     </ul>
                 )}
             </div>
-
             {searchError && <div className="text-red-400 text-xs text-center">{searchError}</div>}
-
             {previewScripture && (
                 <div className="mt-2 bg-slate-700/50 border border-slate-600 rounded-lg p-3 animate-in fade-in slide-in-from-top-2 border-l-4 border-l-blue-500">
                     <div className="flex justify-between items-start mb-2">
@@ -256,14 +213,13 @@ const AudioMonitor = () => {
                     </div>
                 </div>
             )}
-
             {favorites.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-slate-700">
                     <h4 className="text-xs text-slate-400 uppercase font-bold mb-2">⭐ Quick Access / Favorites</h4>
                     <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
                         {favorites.map((fav, idx) => (
                             <div key={idx} className="shrink-0 relative group">
-                                <button onClick={() => projectScripture(fav)} className="bg-purple-900/40 hover:bg-purple-800 border border-purple-500/30 text-purple-200 text-xs px-3 py-2 rounded-lg flex flex-col items-center min-w-[80px] cursor-pointer">
+                                <button onClick={() => { projectScripture(fav); setActiveScripture(fav); }} className="bg-purple-900/40 hover:bg-purple-800 border border-purple-500/30 text-purple-200 text-xs px-3 py-2 rounded-lg flex flex-col items-center min-w-[80px] cursor-pointer">
                                     <span className="font-bold">{fav.reference}</span>
                                     <span className="opacity-50 text-[10px]">{fav.version}</span>
                                 </button>
@@ -278,7 +234,6 @@ const AudioMonitor = () => {
 
       {/* RIGHT COLUMN */}
       <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-full">
-        {/* ... (Same Right Column as before) ... */}
         <div className="bg-slate-800 p-4 border-b border-slate-700 flex flex-col gap-3 shrink-0">
             <div className="flex justify-between items-center">
                 <h2 className="text-purple-400 font-semibold flex items-center gap-2">✨ Detected Scriptures</h2>
@@ -290,7 +245,7 @@ const AudioMonitor = () => {
 
             <div className="flex flex-wrap items-center gap-2 text-sm bg-slate-950 p-2 rounded border border-slate-800">
                 <select value={layoutMode} onChange={(e) => updateLayoutMode(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="LOWER_THIRD">Lower Third</option><option value="CENTER">Center</option></select>
-                <select value={aspectRatio} onChange={(e) => updateAspectRatio(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="16:9">16:9</option><option value="12:5">12:5 (Ultra)</option></select>
+                <select value={aspectRatio} onChange={(e) => updateAspectRatio(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="16:9">16:9</option><option value="12:5">12:5</option></select>
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
                 <select value={textAlign} onChange={(e) => updateTextAlign(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justify</option></select>
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
@@ -306,21 +261,46 @@ const AudioMonitor = () => {
         </div>
 
         <div className="flex-1 bg-slate-900 p-6 overflow-y-auto space-y-4">
-            {detectedScripture ? (
-                <div className="bg-purple-900/20 border border-purple-500/50 p-6 rounded-xl animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
-                    <div className="flex justify-between items-start mb-4">
+            {activeScripture ? (
+                <div className="bg-purple-900/20 border border-purple-500/50 p-6 rounded-xl animate-in fade-in slide-in-from-bottom-4 duration-500 relative flex flex-col h-full max-h-full">
+                    <div className="flex justify-between items-start mb-4 shrink-0">
                         <div className="flex items-center gap-2">
-                            <h3 className="text-2xl font-bold text-white">{detectedScripture.reference} <span className="text-sm font-normal text-purple-300">({detectedScripture.version})</span></h3>
-                            <button onClick={() => toggleFavorite(detectedScripture)} className={`text-xl hover:scale-110 transition-transform ${isFavorited(detectedScripture) ? 'text-yellow-400' : 'text-slate-600 hover:text-yellow-200'}`} title={isFavorited(detectedScripture) ? "Remove from Favorites" : "Add to Favorites"}>★</button>
+                            <h3 className="text-2xl font-bold text-white">{activeScripture.reference} <span className="text-sm font-normal text-purple-300">({activeScripture.version})</span></h3>
+                            <button onClick={() => toggleFavorite(activeScripture)} className={`text-xl hover:scale-110 transition-transform ${isFavorited(activeScripture) ? 'text-yellow-400' : 'text-slate-600 hover:text-yellow-200'}`} title={isFavorited(activeScripture) ? "Remove from Favorites" : "Add to Favorites"}>★</button>
                         </div>
-                        <button onClick={() => projectScripture(detectedScripture)} className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer" title="[Alt + P]">PROJECT 📺</button>
+                        <button onClick={() => projectScripture(activeScripture)} className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer" title="[Alt + P]">PROJECT 📺</button>
                     </div>
-                    <p className="text-purple-200 text-lg leading-relaxed font-serif max-h-40 overflow-y-auto mb-4">"{detectedScripture.text}"</p>
-                    {liveScripture && totalSlides > 1 && (
-                        <div className="flex items-center justify-between bg-slate-800 p-2 rounded-lg border border-slate-600 mt-4">
-                            <button onClick={prevSlide} disabled={currentSlideIndex === 0} className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-30 rounded text-white font-bold transition-colors cursor-pointer" title="[Left Arrow]">⬅ Prev</button>
-                            <span className="text-sm font-mono text-purple-300">Slide {currentSlideIndex + 1} / {totalSlides}</span>
-                            <button onClick={nextSlide} disabled={currentSlideIndex === totalSlides - 1} className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-30 rounded text-white font-bold transition-colors cursor-pointer" title="[Right Arrow]">Next ➡</button>
+
+                    {/* FULL TEXT DISPLAY */}
+                    <p className="text-purple-200 text-lg leading-relaxed font-serif mb-4 overflow-y-auto max-h-40 border-b border-purple-500/30 pb-4">
+                        "{activeScripture.text}"
+                    </p>
+
+                    {/* NEW: VERSE-BY-VERSE NAVIGATION (REPLACES PREV/NEXT) */}
+                    {slides.length > 1 && (
+                        <div className="flex-1 overflow-y-auto min-h-0 space-y-2 pr-1 custom-scrollbar">
+                            <h4 className="text-xs font-bold text-purple-400 uppercase mb-2">Jump to Verse</h4>
+                            {slides.map((slide, index) => (
+                                <button
+                                    key={index}
+                                    onClick={() => jumpToSlide(index)}
+                                    className={`w-full text-left px-4 py-3 rounded-lg border transition-all duration-200 flex gap-3 group
+                                        ${currentSlideIndex === index
+                                            ? 'bg-purple-600 border-purple-400 text-white shadow-lg'
+                                            : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:border-slate-500'
+                                        }
+                                    `}
+                                >
+                                    <span className={`font-bold font-mono text-sm ${currentSlideIndex === index ? 'text-purple-200' : 'text-slate-500'}`}>
+                                        {/* Display verse number if available in ref, otherwise index + 1 */}
+                                        {slide.reference.split(':')[1] || index + 1}
+                                    </span>
+                                    <span className="text-sm line-clamp-2 leading-snug">
+                                        {/* We assume slide text starts with number, strip it for cleaner look if needed, or just show raw */}
+                                        {slide.text}
+                                    </span>
+                                </button>
+                            ))}
                         </div>
                     )}
                 </div>
@@ -330,18 +310,22 @@ const AudioMonitor = () => {
                     <p className="text-sm mt-2">Try saying "John Chapter 3 Verse 16"</p>
                 </div>
             )}
+
+            {/* HISTORY (Bottom of Right Col) */}
             {history.length > 0 && (
-                <div className="mt-8 pt-4 border-t border-slate-800">
+                <div className="mt-8 pt-4 border-t border-slate-800 shrink-0">
                     <div className="flex justify-between items-center mb-3">
                         <h4 className="text-slate-500 text-xs uppercase font-bold">Session History</h4>
                         <div className="flex gap-2"><button onClick={exportHistory} className="text-xs bg-blue-900 hover:bg-blue-700 text-blue-200 px-2 py-1 rounded transition-colors cursor-pointer">⬇ Export</button><button onClick={clearHistory} className="text-xs bg-slate-800 hover:bg-red-900 text-slate-400 hover:text-red-200 px-2 py-1 rounded transition-colors cursor-pointer">🗑 Clear</button></div>
                     </div>
-                    {history.slice(1).map((item, idx) => (
-                        <div key={idx} className="mb-3 p-3 bg-slate-800/50 rounded flex justify-between items-center group hover:bg-slate-800 transition-colors">
-                            <div className="overflow-hidden mr-2"><span className="text-purple-400 font-bold text-sm block">{item.reference} ({item.version})</span><span className="text-slate-400 text-xs truncate block">{item.text}</span></div>
-                            <button onClick={() => projectScripture(item)} className="opacity-0 group-hover:opacity-100 bg-slate-700 hover:bg-purple-600 text-white text-xs px-3 py-1 rounded transition-all cursor-pointer">Show</button>
-                        </div>
-                    ))}
+                    <div className="max-h-32 overflow-y-auto">
+                        {history.slice(1).map((item, idx) => (
+                            <div key={idx} className="mb-3 p-3 bg-slate-800/50 rounded flex justify-between items-center group hover:bg-slate-800 transition-colors">
+                                <div className="overflow-hidden mr-2"><span className="text-purple-400 font-bold text-sm block">{item.reference} ({item.version})</span><span className="text-slate-400 text-xs truncate block">{item.text}</span></div>
+                                <button onClick={() => { projectScripture(item); setActiveScripture(item); }} className="opacity-0 group-hover:opacity-100 bg-slate-700 hover:bg-purple-600 text-white text-xs px-3 py-1 rounded transition-all cursor-pointer">Show</button>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
         </div>

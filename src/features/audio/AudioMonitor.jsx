@@ -19,15 +19,56 @@ const AudioMonitor = () => {
   const [searchError, setSearchError] = useState(null);
   const [previewScripture, setPreviewScripture] = useState(null);
 
-  // --- NEW: FAVORITES STATE ---
+  // NEW: Wake Lock State
+  const [isWakeLockActive, setIsWakeLockActive] = useState(false);
+
   const [favorites, setFavorites] = useState(() => {
     try { return JSON.parse(localStorage.getItem('saved_favorites')) || []; } catch (e) { return []; }
   });
 
   useEffect(() => { localStorage.setItem('bible_version', version); }, [version]);
-
-  // Save favorites whenever they change
   useEffect(() => { localStorage.setItem('saved_favorites', JSON.stringify(favorites)); }, [favorites]);
+
+  // --- WAKE LOCK LOGIC ---
+  useEffect(() => {
+    let wakeLock = null;
+
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+          setIsWakeLockActive(true);
+          console.log('Screen Wake Lock: Active');
+
+          // If the lock is released (e.g. user minimizes window), update state
+          wakeLock.addEventListener('release', () => {
+            setIsWakeLockActive(false);
+            console.log('Screen Wake Lock: Released');
+          });
+        }
+      } catch (err) {
+        console.error(`${err.name}, ${err.message}`);
+        setIsWakeLockActive(false);
+      }
+    };
+
+    // Request lock on load
+    requestWakeLock();
+
+    // Re-request lock if the tab becomes visible again (browsers often drop it when hidden)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && !wakeLock) {
+        requestWakeLock();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      if (wakeLock) wakeLock.release();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   const getBibleData = () => {
     switch(version) {
@@ -90,16 +131,11 @@ const AudioMonitor = () => {
 
   const handlePreviewEdit = (e) => { setPreviewScripture(prev => ({ ...prev, text: e.target.value, verseList: null })); };
 
-  // --- NEW: FAVORITES LOGIC ---
   const toggleFavorite = (scripture) => {
     const exists = favorites.find(f => f.reference === scripture.reference && f.version === scripture.version);
-    if (exists) {
-        setFavorites(prev => prev.filter(f => !(f.reference === scripture.reference && f.version === scripture.version)));
-    } else {
-        setFavorites(prev => [scripture, ...prev]);
-    }
+    if (exists) setFavorites(prev => prev.filter(f => !(f.reference === scripture.reference && f.version === scripture.version)));
+    else setFavorites(prev => [scripture, ...prev]);
   };
-
   const isFavorited = (scripture) => {
     if (!scripture) return false;
     return favorites.some(f => f.reference === scripture.reference && f.version === scripture.version);
@@ -108,25 +144,25 @@ const AudioMonitor = () => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-6xl mx-auto h-[calc(100vh-4rem)]">
 
-      {/* LEFT COLUMN: Controls & Favorites */}
+      {/* LEFT COLUMN */}
       <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-full">
-        {/* Header */}
         <div className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center shrink-0">
             <h2 className="text-slate-200 font-semibold flex items-center gap-2">🎙️ Live Audio</h2>
             <div className="flex items-center gap-3">
               <select value={version} onChange={(e) => setVersion(e.target.value)} className="bg-slate-900 text-white text-sm font-bold py-1 px-3 rounded border border-slate-600 focus:outline-none focus:border-purple-500 transition-colors">
                 <option value="KJV">KJV</option><option value="NIV">NIV</option><option value="NKJV">NKJV</option><option value="AMP">AMP</option><option value="ESV">ESV</option><option value="NLT">NLT</option><option value="GW">GW</option>
               </select>
-              <div className="flex items-center gap-2"><div className={`h-2 w-2 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} /><span className="text-xs text-slate-400 w-12">{isListening ? 'ON AIR' : 'OFF'}</span></div>
+              <div className="flex items-center gap-2">
+                  <div className={`h-2 w-2 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                  <span className="text-xs text-slate-400 w-12">{isListening ? 'ON AIR' : 'OFF'}</span>
+              </div>
             </div>
         </div>
 
-        {/* Transcript (Flexible Height) */}
         <div className="flex-1 bg-slate-950 p-6 overflow-y-auto font-mono text-sm leading-relaxed min-h-[150px]">
             {error && <div className="text-red-400 mb-2">{error}</div>} <span className="text-slate-300">{transcript}</span> <span className="text-emerald-400 italic"> {interimTranscript}</span> <div ref={bottomRef} />
         </div>
 
-        {/* Bottom Section: Controls + Manual Search + Favorites */}
         <div className="p-4 bg-slate-800 border-t border-slate-700 flex flex-col gap-3 shrink-0">
             <div className="flex gap-3">
                 <button onClick={isListening ? stopListening : startListening} className={`px-4 py-2 rounded-lg font-medium text-white transition-colors cursor-pointer flex-1 ${isListening ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>{isListening ? 'Stop Mic' : 'Start Mic'}</button>
@@ -153,27 +189,17 @@ const AudioMonitor = () => {
                 </div>
             )}
 
-            {/* --- FAVORITES LIST --- */}
             {favorites.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-slate-700">
                     <h4 className="text-xs text-slate-400 uppercase font-bold mb-2">⭐ Quick Access / Favorites</h4>
                     <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
                         {favorites.map((fav, idx) => (
                             <div key={idx} className="shrink-0 relative group">
-                                <button
-                                    onClick={() => projectScripture(fav)}
-                                    className="bg-purple-900/40 hover:bg-purple-800 border border-purple-500/30 text-purple-200 text-xs px-3 py-2 rounded-lg flex flex-col items-center min-w-[80px] cursor-pointer"
-                                >
+                                <button onClick={() => projectScripture(fav)} className="bg-purple-900/40 hover:bg-purple-800 border border-purple-500/30 text-purple-200 text-xs px-3 py-2 rounded-lg flex flex-col items-center min-w-[80px] cursor-pointer">
                                     <span className="font-bold">{fav.reference}</span>
                                     <span className="opacity-50 text-[10px]">{fav.version}</span>
                                 </button>
-                                <button
-                                    onClick={(e) => { e.stopPropagation(); toggleFavorite(fav); }}
-                                    className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                                    title="Remove"
-                                >
-                                    ×
-                                </button>
+                                <button onClick={(e) => { e.stopPropagation(); toggleFavorite(fav); }} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" title="Remove">×</button>
                             </div>
                         ))}
                     </div>
@@ -187,25 +213,24 @@ const AudioMonitor = () => {
         <div className="bg-slate-800 p-4 border-b border-slate-700 flex flex-col gap-3 shrink-0">
             <div className="flex justify-between items-center">
                 <h2 className="text-purple-400 font-semibold flex items-center gap-2">✨ Detected Scriptures</h2>
-                <button onClick={clearProjection} className="text-xs bg-slate-700 hover:bg-red-600 text-white px-3 py-1 rounded transition-colors cursor-pointer" title="[Esc]">Clear</button>
+                {/* NEW: AWAKE BADGE */}
+                <div className="flex items-center gap-2">
+                    {isWakeLockActive && (
+                        <span className="text-[10px] bg-green-900/50 text-green-400 px-2 py-1 rounded border border-green-800" title="Screen Wake Lock Active">
+                            🔒 Awake
+                        </span>
+                    )}
+                    <button onClick={clearProjection} className="text-xs bg-slate-700 hover:bg-red-600 text-white px-3 py-1 rounded transition-colors cursor-pointer" title="[Esc]">Clear</button>
+                </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 text-sm bg-slate-950 p-2 rounded border border-slate-800">
-                <select value={layoutMode} onChange={(e) => updateLayoutMode(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none">
-                    <option value="LOWER_THIRD">Lower Third</option><option value="CENTER">Center</option>
-                </select>
-                <select value={aspectRatio} onChange={(e) => updateAspectRatio(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none">
-                    <option value="16:9">16:9</option><option value="12:5">12:5 (Ultra)</option>
-                </select>
+                <select value={layoutMode} onChange={(e) => updateLayoutMode(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="LOWER_THIRD">Lower Third</option><option value="CENTER">Center</option></select>
+                <select value={aspectRatio} onChange={(e) => updateAspectRatio(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="16:9">16:9</option><option value="12:5">12:5 (Ultra)</option></select>
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
-                <select value={textAlign} onChange={(e) => updateTextAlign(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none">
-                    <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justify</option>
-                </select>
+                <select value={textAlign} onChange={(e) => updateTextAlign(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justify</option></select>
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
-                <div className="flex items-center gap-1" title="Font Size">
-                    <span className="text-xs text-slate-400">Aa</span>
-                    <input type="range" min="30" max="120" value={fontSize} onChange={(e) => updateFontSize(parseInt(e.target.value))} className="w-16 accent-purple-500 cursor-pointer" />
-                </div>
+                <div className="flex items-center gap-1" title="Font Size"><span className="text-xs text-slate-400">Aa</span><input type="range" min="30" max="120" value={fontSize} onChange={(e) => updateFontSize(parseInt(e.target.value))} className="w-16 accent-purple-500 cursor-pointer" /></div>
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
                 <div className="flex items-center gap-1">
                     <input type="color" value={theme.backgroundColor} onChange={(e) => updateTheme('backgroundColor', e.target.value)} className="w-5 h-5 rounded cursor-pointer border-none p-0 bg-transparent" title="Background" />
@@ -220,14 +245,7 @@ const AudioMonitor = () => {
                     <div className="flex justify-between items-start mb-4">
                         <div className="flex items-center gap-2">
                             <h3 className="text-2xl font-bold text-white">{detectedScripture.reference} <span className="text-sm font-normal text-purple-300">({detectedScripture.version})</span></h3>
-                            {/* --- STAR BUTTON --- */}
-                            <button
-                                onClick={() => toggleFavorite(detectedScripture)}
-                                className={`text-xl hover:scale-110 transition-transform ${isFavorited(detectedScripture) ? 'text-yellow-400' : 'text-slate-600 hover:text-yellow-200'}`}
-                                title={isFavorited(detectedScripture) ? "Remove from Favorites" : "Add to Favorites"}
-                            >
-                                ★
-                            </button>
+                            <button onClick={() => toggleFavorite(detectedScripture)} className={`text-xl hover:scale-110 transition-transform ${isFavorited(detectedScripture) ? 'text-yellow-400' : 'text-slate-600 hover:text-yellow-200'}`} title={isFavorited(detectedScripture) ? "Remove from Favorites" : "Add to Favorites"}>★</button>
                         </div>
                         <button onClick={() => projectScripture(detectedScripture)} className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer" title="[Alt + P]">PROJECT 📺</button>
                     </div>

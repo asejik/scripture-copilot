@@ -1,4 +1,3 @@
-// Maps spoken/typed variations to the Exact Key in your JSON file
 export const BOOK_ALIASES = {
   // Old Testament
   "genesis": "Genesis", "gen": "Genesis", "ge": "Genesis",
@@ -26,8 +25,16 @@ export const BOOK_ALIASES = {
   "proverbs": "Proverbs", "prov": "Proverbs", "pr": "Proverbs",
   "ecclesiastes": "Ecclesiastes", "eccl": "Ecclesiastes",
 
-  // FIX: Song of Solomon variations
-  "song of solomon": "Song of Solomon", "songs of solomon": "Song of Solomon", "song of songs": "Song of Solomon", "canticles": "Song of Solomon", "sos": "Song of Solomon", "sons of solomon": "Song of Solomon", "son of solomon": "Song of Solomon",
+  // FIX: Song of Solomon variations (Added "solomon" and "songs")
+  "song of solomon": "Song of Solomon",
+  "songs of solomon": "Song of Solomon",
+  "song of songs": "Song of Solomon",
+  "canticles": "Song of Solomon",
+  "sos": "Song of Solomon",
+  "sons of solomon": "Song of Solomon",
+  "son of solomon": "Song of Solomon",
+  "solomon": "Song of Solomon", // CRITICAL FIX: Catches "Solomon 1:1"
+  "songs": "Song of Solomon",   // CRITICAL FIX: Catches "Songs 1:1"
 
   "isaiah": "Isaiah", "isa": "Isaiah",
   "jeremiah": "Jeremiah", "jer": "Jeremiah",

@@ -17,17 +17,26 @@ export const parseScripture = (text, bibleData, versionName) => {
       let spokenBook = numberPrefix ? `${numberPrefix.trim()} ${bookName}` : bookName;
       spokenBook = spokenBook.trim().toLowerCase();
 
-      // 1. Resolve Alias (e.g., "psalm" -> "Psalms")
+      // 1. Resolve Alias
       let realBookKey = BOOK_ALIASES[spokenBook];
 
-      // 2. Fallback Logic for JSON Mismatch (The Fix)
-      // If "Psalms" isn't in the JSON, try "Psalm". If "Song of Solomon" fails, try "Song of Songs".
-      if (!bibleData[realBookKey]) {
+      // 2. Fallback Logic for JSON Mismatch
+      if (realBookKey && !bibleData[realBookKey]) {
+         // Check specific tricky books
          if (realBookKey === "Psalms" && bibleData["Psalm"]) realBookKey = "Psalm";
-         else if (realBookKey === "Song of Solomon" && bibleData["Song of Songs"]) realBookKey = "Song of Songs";
+
+         // CRITICAL FIX: Check ALL variations for Song of Solomon
+         else if (realBookKey === "Song of Solomon") {
+             if (bibleData["Song of Solomon"]) realBookKey = "Song of Solomon";
+             else if (bibleData["Song of Songs"]) realBookKey = "Song of Songs"; // NIV Style
+             else if (bibleData["Songs of Solomon"]) realBookKey = "Songs of Solomon"; // Plural Style
+             else if (bibleData["Canticles"]) realBookKey = "Canticles";
+         }
+
          else if (realBookKey === "Revelation" && bibleData["Revelations"]) realBookKey = "Revelations";
       }
 
+      // 3. Final Check
       if (!realBookKey || !bibleData[realBookKey]) continue;
 
       const bookData = bibleData[realBookKey];

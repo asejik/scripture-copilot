@@ -13,6 +13,14 @@ import esvData from '../../data/esv.json';
 import nltData from '../../data/nlt.json';
 import gwData from '../../data/gw.json';
 
+// --- THEME PRESETS ---
+const THEMES = {
+  'Green': { backgroundColor: '#00b140', textColor: '#ffffff' },
+  'Blue': { backgroundColor: '#0047b1', textColor: '#ffffff' },
+  'Black': { backgroundColor: '#000000', textColor: '#ffffff' },
+  'White': { backgroundColor: '#ffffff', textColor: '#000000' },
+};
+
 const AudioMonitor = () => {
   const [version, setVersion] = useState(() => localStorage.getItem('bible_version') || 'KJV');
   const [secondaryVersion, setSecondaryVersion] = useState(() => localStorage.getItem('bible_version_sec') || 'NONE');
@@ -20,9 +28,12 @@ const AudioMonitor = () => {
   const [searchError, setSearchError] = useState(null);
   const [previewScripture, setPreviewScripture] = useState(null);
   const [isWakeLockActive, setIsWakeLockActive] = useState(false);
+
+  // AutoComplete & UI State
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
+  const [showHelp, setShowHelp] = useState(false); // NEW: Help Modal State
 
   const [favorites, setFavorites] = useState(() => { try { return JSON.parse(localStorage.getItem('saved_favorites')) || []; } catch (e) { return []; }});
 
@@ -65,7 +76,7 @@ const AudioMonitor = () => {
     }
   }, [version, currentBibleData]);
 
-  const { projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex, slides, jumpToSlide, fontSize, updateFontSize, layoutMode, updateLayoutMode, textAlign, updateTextAlign, aspectRatio, updateAspectRatio, resetSettings } = useProjection();
+  const { projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex, slides, jumpToSlide, fontSize, updateFontSize, theme, updateTheme, layoutMode, updateLayoutMode, textAlign, updateTextAlign, aspectRatio, updateAspectRatio, resetSettings } = useProjection();
 
   const bottomRef = useRef(null);
   useEffect(() => { if (bottomRef.current) bottomRef.current.scrollIntoView({ behavior: 'smooth' }); }, [transcript, interimTranscript]);
@@ -82,25 +93,32 @@ const AudioMonitor = () => {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
+        // Dropdown Navigation
         if (e.target.tagName === 'INPUT' && e.target.type === 'text' && showSuggestions) {
             if (e.key === 'ArrowDown') { e.preventDefault(); setActiveSuggestionIndex(prev => (prev + 1) % suggestions.length); return; }
             if (e.key === 'ArrowUp') { e.preventDefault(); setActiveSuggestionIndex(prev => (prev - 1 + suggestions.length) % suggestions.length); return; }
             if (e.key === 'Enter') { e.preventDefault(); selectSuggestion(suggestions[activeSuggestionIndex]); return; }
             if (e.key === 'Escape') { setShowSuggestions(false); return; }
         }
+
+        // Close Help Modal
+        if (showHelp && e.key === 'Escape') { setShowHelp(false); return; }
+
         if ((e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && e.key !== 'Escape' && e.key !== 'Enter') return;
+
         switch(e.key) {
             case 'Escape': if (previewScripture) setPreviewScripture(null); else clearProjection(); break;
             case 'ArrowRight': nextSlide(); break;
             case 'ArrowLeft': prevSlide(); break;
             case 'Enter': if (previewScripture && !e.shiftKey) { e.preventDefault(); confirmProjection(); } break;
             case 'p': if (e.altKey && activeScripture) handleProject(activeScripture); break;
+            case '?': if (e.shiftKey) setShowHelp(prev => !prev); break; // Shift + ? to toggle help
             default: break;
         }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [previewScripture, activeScripture, nextSlide, prevSlide, clearProjection, showSuggestions, suggestions, activeSuggestionIndex]);
+  }, [previewScripture, activeScripture, nextSlide, prevSlide, clearProjection, showSuggestions, suggestions, activeSuggestionIndex, showHelp]);
 
   const handleManualSearch = (e) => {
     e.preventDefault(); setSearchError(null); setPreviewScripture(null);
@@ -141,9 +159,34 @@ const AudioMonitor = () => {
     if (exists) setFavorites(prev => prev.filter(f => !(f.reference === scripture.reference && f.version === scripture.version))); else setFavorites(prev => [scripture, ...prev]);
   };
   const isFavorited = (scripture) => { if (!scripture) return false; return favorites.some(f => f.reference === scripture.reference && f.version === scripture.version); };
+  const applyPreset = (presetName) => { const p = THEMES[presetName]; if (p) { updateTheme('backgroundColor', p.backgroundColor); updateTheme('textColor', p.textColor); } };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-6xl mx-auto h-[calc(100vh-4rem)]">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-6xl mx-auto h-[calc(100vh-4rem)] relative">
+
+      {/* --- HELP MODAL --- */}
+      {showHelp && (
+        <div className="absolute inset-0 bg-slate-900/90 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-slate-800 border border-slate-600 rounded-xl p-6 max-w-lg w-full shadow-2xl">
+                <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
+                    <h3 className="text-xl font-bold text-white">⌨️ Keyboard Shortcuts</h3>
+                    <button onClick={() => setShowHelp(false)} className="text-slate-400 hover:text-white text-xl font-bold">&times;</button>
+                </div>
+                <div className="space-y-2 text-sm text-slate-300">
+                    <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Enter</span> <span>Search / Project Verse</span></div>
+                    <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Esc</span> <span>Clear Screen / Cancel</span></div>
+                    <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Alt + P</span> <span>Project Detected Voice Verse</span></div>
+                    <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Right Arrow</span> <span>Next Slide/Verse</span></div>
+                    <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Left Arrow</span> <span>Previous Slide/Verse</span></div>
+                    <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Shift + ?</span> <span>Show This Help</span></div>
+                </div>
+                <div className="mt-4 text-center">
+                    <button onClick={() => setShowHelp(false)} className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded font-bold">Got it!</button>
+                </div>
+            </div>
+        </div>
+      )}
+
       {/* LEFT COLUMN */}
       <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-full">
         <div className="bg-slate-800 p-4 border-b border-slate-700 flex justify-between items-center shrink-0">
@@ -157,8 +200,7 @@ const AudioMonitor = () => {
               </select>
               <span className="text-xs text-slate-500">+</span>
               <select value={secondaryVersion} onChange={(e) => setSecondaryVersion(e.target.value)} className="bg-slate-900 text-blue-200 text-xs font-bold py-1 px-2 rounded border border-blue-900 focus:outline-none focus:border-blue-500">
-                <option value="NONE">None</option>
-                <option value="KJV">KJV</option><option value="NIV">NIV</option><option value="NKJV">NKJV</option><option value="AMP">AMP</option><option value="ESV">ESV</option><option value="NLT">NLT</option><option value="GW">GW</option>
+                <option value="NONE">None</option><option value="KJV">KJV</option><option value="NIV">NIV</option><option value="NKJV">NKJV</option><option value="AMP">AMP</option><option value="ESV">ESV</option><option value="NLT">NLT</option><option value="GW">GW</option>
               </select>
               <div className="flex items-center gap-1 ml-2"><div className={`h-2 w-2 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} /></div>
             </div>
@@ -222,26 +264,33 @@ const AudioMonitor = () => {
                 <h2 className="text-purple-400 font-semibold flex items-center gap-2">✨ Detected Scriptures</h2>
                 <div className="flex items-center gap-2">
                     {isWakeLockActive && <span className="text-[10px] bg-green-900/50 text-green-400 px-2 py-1 rounded border border-green-800" title="Screen Wake Lock Active">🔒 Awake</span>}
+                    {/* HELP BUTTON */}
+                    <button onClick={() => setShowHelp(true)} className="text-slate-400 hover:text-white px-2" title="Keyboard Shortcuts">❓</button>
                     <button onClick={clearProjection} className="text-xs bg-slate-700 hover:bg-red-600 text-white px-3 py-1 rounded transition-colors cursor-pointer" title="[Esc]">Clear</button>
                 </div>
             </div>
 
-            {/* CLEANED UP HEADER: NO THEME CONTROLS */}
             <div className="flex flex-wrap items-center gap-2 text-sm bg-slate-950 p-2 rounded border border-slate-800">
                 <select value={layoutMode} onChange={(e) => updateLayoutMode(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="LOWER_THIRD">Lower Third</option><option value="CENTER">Center</option></select>
                 <select value={aspectRatio} onChange={(e) => updateAspectRatio(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="16:9">16:9</option><option value="12:5">12:5 (Ultra)</option></select>
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
                 <select value={textAlign} onChange={(e) => updateTextAlign(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justify</option></select>
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
-
-                {/* RESTORED FONT SLIDER */}
                 <div className="flex items-center gap-1" title="Font Size"><span className="text-xs text-slate-400">Aa</span><input type="range" min="30" max="120" value={fontSize} onChange={(e) => updateFontSize(parseInt(e.target.value))} className="w-16 accent-purple-500 cursor-pointer" /></div>
+
+                <div className="w-px h-4 bg-slate-700 mx-1"></div>
+                {/* PRESETS DROPDOWN */}
+                <select onChange={(e) => applyPreset(e.target.value)} defaultValue="" className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none w-20">
+                    <option value="" disabled>Presets</option>
+                    {Object.keys(THEMES).map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
 
                 <div className="w-px h-4 bg-slate-700 mx-1"></div>
                 <button onClick={() => { if(confirm('Reset all theme settings to default?')) resetSettings(); }} className="text-xs bg-red-900/30 hover:bg-red-900 text-red-400 hover:text-white px-2 py-1 rounded transition-colors cursor-pointer" title="Reset to Factory Defaults">⟳ Reset</button>
             </div>
         </div>
 
+        {/* ... (Main Card & History - No Changes) ... */}
         <div className="flex-1 bg-slate-900 p-4 overflow-y-auto space-y-4">
             {activeScripture ? (
                 <div className="bg-purple-900/20 border border-purple-500/50 p-4 rounded-xl animate-in fade-in slide-in-from-bottom-4 duration-500 relative flex flex-col">

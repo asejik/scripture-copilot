@@ -1,119 +1,135 @@
 import React, { useRef, useLayoutEffect } from 'react';
+import { useProjection } from '../context/ProjectionContext';
 
 const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspectRatio, fontFamily, textTransform, isPreview = false }) => {
   const containerRef = useRef(null);
-  const boxRef = useRef(null);
+
+  // Get Position Setting
+  const { headerPosition, headerFontSize } = useProjection();
 
   // Auto-shrink logic
   useLayoutEffect(() => {
     if (!containerRef.current) return;
     const el = containerRef.current;
 
-    // Reset to base size first (using px for precision in shrink loop)
-    // We scale the base fontSize by the container width ratio for previews
-    // But since we are using 'em' or '%' for padding now, we just need to find the right pixel font size
-    // that fits the current container.
+    el.style.fontSize = `${fontSize}px`;
 
-    // Start with a calculated size.
-    // If fontSize is 60 (on 1920 screen), that's roughly 3% of width.
-    // So let's try to set the font size relative to container width initially.
-
-    const containerWidth = el.clientWidth;
-    // Base scale factor: 1920px width -> 1.0 scale
-    const scaleFactor = containerWidth / 1920;
-
-    let currentSize = Math.max(12, fontSize * scaleFactor); // Minimum 12px
-    el.style.fontSize = `${currentSize}px`;
-
+    let currentSize = fontSize;
     let iterations = 0;
 
-    // Shrink if overflowing
+    // We only check if text overflows the container
     while (
       (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth) &&
-      currentSize > 8 &&
+      currentSize > 10 &&
       iterations < 50
     ) {
-      currentSize -= (1 * scaleFactor); // Step down proportionally
+      currentSize -= 2;
       el.style.fontSize = `${currentSize}px`;
       iterations++;
     }
-  }, [content, fontSize, layoutMode, textAlign, fontFamily, textTransform, aspectRatio, isPreview]); // Add isPreview dependency
+  }, [content, fontSize, layoutMode, textAlign, fontFamily, textTransform, aspectRatio, headerPosition, headerFontSize]);
 
   if (!content) return null;
 
-  const isLowerThird = layoutMode === 'LOWER_THIRD';
   const hasSecondary = !!content.secondaryText;
 
-  // Aspect Ratio
-  const ratioValue = aspectRatio === '12:5' ? '2.4 / 1' : '16 / 9';
+  // --- ABSOLUTE POSITIONING LOGIC ---
+  // This maps the settings directly to CSS coordinates
+  const pos = headerPosition || 'TOP_CENTER';
+
+  const headerStyle = {
+      position: 'absolute',
+      zIndex: 20,
+      padding: isPreview ? '0.2em 0.6em' : '0.4em 1.2em',
+      borderRadius: '0.3em',
+      backgroundColor: theme.headerBackgroundColor || '#000000',
+      color: theme.headerTextColor || '#ffffff',
+      fontWeight: 'bold',
+      fontSize: isPreview ? `${headerFontSize * 0.6}px` : `${headerFontSize}px`,
+      boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+      whiteSpace: 'nowrap',
+      // Default to auto to prevent unwanted stretching
+      top: 'auto', bottom: 'auto', left: 'auto', right: 'auto', transform: 'none'
+  };
+
+  // Apply coordinates based on the 6 positions
+  switch (pos) {
+      case 'TOP_LEFT':
+          headerStyle.top = '6%';
+          headerStyle.left = '6%';
+          break;
+      case 'TOP_CENTER':
+          headerStyle.top = '6%';
+          headerStyle.left = '50%';
+          headerStyle.transform = 'translateX(-50%)';
+          break;
+      case 'TOP_RIGHT':
+          headerStyle.top = '6%';
+          headerStyle.right = '6%';
+          break;
+      case 'BOTTOM_LEFT':
+          headerStyle.bottom = '6%';
+          headerStyle.left = '6%';
+          break;
+      case 'BOTTOM_CENTER':
+          headerStyle.bottom = '6%';
+          headerStyle.left = '50%';
+          headerStyle.transform = 'translateX(-50%)';
+          break;
+      case 'BOTTOM_RIGHT':
+          headerStyle.bottom = '6%';
+          headerStyle.right = '6%';
+          break;
+      default: // Default Top Center
+          headerStyle.top = '6%';
+          headerStyle.left = '50%';
+          headerStyle.transform = 'translateX(-50%)';
+  }
 
   return (
+    // MAIN CONTAINER (The "Green Bounding Area")
     <div
         style={{
             width: '100%',
             height: '100%',
-            display: 'flex',
-            flexDirection: 'column',
             position: 'relative',
-            justifyContent: isLowerThird ? 'flex-end' : 'center',
-            paddingBottom: '0'
+            overflow: 'hidden',
+            // FIX: Background Color is applied HERE to fill the full aspect ratio
+            backgroundColor: theme.backgroundColor || '#000000',
         }}
     >
-        {/* HEADER TAB */}
-        <div
-            style={{
-                backgroundColor: theme.headerBackgroundColor || '#581c87',
-                color: theme.headerTextColor || '#ffffff',
-                borderColor: theme.headerBackgroundColor,
-                alignSelf: isLowerThird ? 'flex-start' : 'center',
-                marginLeft: isLowerThird ? '5%' : 'auto',
-                marginRight: isLowerThird ? '0' : 'auto',
-                marginBottom: '-1px',
-                zIndex: 20,
-                fontSize: isPreview ? '0.8em' : '2em', // Responsive font size
-                padding: '0.2em 1em',
-                borderRadius: '0.5em 0.5em 0 0',
-                fontWeight: 'bold',
-                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-            }}
-        >
+        {/* 1. HEADER (Absolutely Positioned) */}
+        <div style={headerStyle}>
             {content.reference}
         </div>
 
-        {/* MAIN BOX */}
+        {/* 2. TEXT BODY (Centered & Full Size) */}
         <div
-            ref={boxRef}
             style={{
-                backgroundColor: theme.backgroundColor || '#0f172a',
-                borderColor: '#334155',
-                borderWidth: '1px',
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center', // Vertically Center
+                justifyContent: 'center', // Horizontally Center
                 position: 'relative',
                 zIndex: 10,
-                overflow: 'hidden',
-                height: isLowerThird ? '40%' : '100%',
-                width: isLowerThird ? '95%' : '100%',
-                alignSelf: 'center',
-                borderRadius: isLowerThird ? '1em' : '1em',
-                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)'
             }}
         >
             <div
                 ref={containerRef}
                 style={{
                     color: theme.textColor || '#ffffff',
-                    width: '100%',
-                    height: '100%',
-                    // KEY FIX: Percentage padding ensures scaling works in Preview AND Output
-                    padding: aspectRatio === '12:5' ? '4%' : '6%',
+                    // Add padding so text doesn't touch the very edge of the screen
+                    width: '90%',
+                    maxHeight: '85%', // Leave room for header
                     overflow: 'hidden',
                     wordWrap: 'break-word',
                     whiteSpace: 'pre-wrap',
-                    margin: 0,
                     textTransform: textTransform,
                     fontFamily: fontFamily,
                     display: hasSecondary ? 'grid' : 'flex',
                     flexDirection: 'column',
-                    justifyContent: isLowerThird ? 'center' : 'center',
+                    justifyContent: 'center',
                     gridTemplateColumns: hasSecondary ? '1fr 1fr' : undefined,
                     gap: hasSecondary ? '5%' : '0',
                     textAlign: textAlign,
@@ -123,7 +139,7 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
             >
                 <div className={`${hasSecondary ? "border-r border-slate-600 pr-5" : "w-full"}`}>
                     {hasSecondary && (
-                        <div style={{ fontSize: '0.5em', opacity: 0.7, marginBottom: '0.5em', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#d8b4fe' }}>
+                        <div style={{ fontSize: '0.6em', opacity: 0.8, marginBottom: '0.5em', textTransform: 'uppercase', letterSpacing: '0.05em', color: theme.textColor }}>
                             {content.version}
                         </div>
                     )}
@@ -131,7 +147,7 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
                 </div>
                 {hasSecondary && (
                     <div className="pl-5">
-                        <div style={{ fontSize: '0.5em', opacity: 0.7, marginBottom: '0.5em', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#d8b4fe' }}>
+                        <div style={{ fontSize: '0.6em', opacity: 0.8, marginBottom: '0.5em', textTransform: 'uppercase', letterSpacing: '0.05em', color: theme.textColor }}>
                             {content.secondaryVersion}
                         </div>
                         <p style={{ opacity: 0.9 }}>{content.secondaryText}</p>

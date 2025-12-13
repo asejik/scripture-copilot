@@ -7,7 +7,7 @@ import { parseScripture, fetchSecondaryText } from '../../utils/scriptureParser'
 import useSongLibrary from '../../hooks/useSongLibrary';
 import ResizableGrid from '../../components/ResizableGrid';
 import ResizableVerticalStack from '../../components/ResizableVerticalStack';
-import SlideRenderer from '../../components/SlideRenderer'; // NEW IMPORT
+import SlideRenderer from '../../components/SlideRenderer';
 
 import kjvData from '../../data/kjv.json';
 import nivData from '../../data/niv.json';
@@ -52,19 +52,29 @@ const AudioMonitor = () => {
   const currentBibleData = getBibleData(version);
   const secondaryBibleData = getBibleData(secondaryVersion);
 
-  // Pass addToHistory to hook so voice detection saves automatically
   const { isListening, transcript, interimTranscript, startListening, stopListening, resetTranscript, error } = useSpeechRecognition();
   const { detectedScripture: voiceDetected } = useScriptureDetection(transcript + ' ' + interimTranscript, currentBibleData, version);
+
+  // --- FIX PERSISTENCE: Initialize local state from Global Store ---
+  const [activeScripture, setActiveScripture] = useState(activeDetection || null);
 
   // Sync Voice -> Active Card (Global Store)
   useEffect(() => {
       if (voiceDetected) {
           updateActiveDetection(voiceDetected);
-          addToHistory(voiceDetected); // Save to history
+          setActiveScripture(voiceDetected); // Update local state immediately
+          addToHistory(voiceDetected);
       }
   }, [voiceDetected]);
 
-  const { projectScripture, liveScripture, nextSlide, prevSlide, currentSlideIndex, slides, jumpToSlide, theme, fontFamily, textTransform, fontSize, layoutMode, textAlign, aspectRatio } = useProjection();
+  // Sync Manual/Click updates back to Global Store
+  useEffect(() => {
+      if (activeScripture) {
+          updateActiveDetection(activeScripture);
+      }
+  }, [activeScripture]);
+
+  const { projectScripture, projectSong, liveScripture, nextSlide, prevSlide, currentSlideIndex, slides, jumpToSlide, theme, fontFamily, textTransform, fontSize, layoutMode, textAlign, aspectRatio } = useProjection();
 
   const bottomRef = useRef(null);
   useEffect(() => { if (bottomRef.current) bottomRef.current.scrollIntoView({ behavior: 'smooth' }); }, [transcript, interimTranscript]);
@@ -93,14 +103,14 @@ const AudioMonitor = () => {
             case 'ArrowRight': nextSlide(); break;
             case 'ArrowLeft': prevSlide(); break;
             case 'Enter': if (previewScripture && !e.shiftKey) { e.preventDefault(); confirmProjection(); } break;
-            case 'p': if (e.altKey && activeDetection) handleProject(activeDetection); break;
+            case 'p': if (e.altKey && activeScripture) handleProject(activeScripture); break;
             case '?': if (e.shiftKey) setShowHelp(prev => !prev); break;
             default: break;
         }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [previewScripture, activeDetection, nextSlide, prevSlide, showSuggestions, suggestions, activeSuggestionIndex, showHelp]);
+  }, [previewScripture, activeScripture, nextSlide, prevSlide, showSuggestions, suggestions, activeSuggestionIndex, showHelp]);
 
   const handleManualSearch = (e) => {
     e.preventDefault(); setSearchError(null); setPreviewScripture(null);
@@ -121,7 +131,7 @@ const AudioMonitor = () => {
         }
     }
     projectScripture(finalScripture);
-    updateActiveDetection(scripture);
+    setActiveScripture(scripture);
     addToHistory(scripture);
     setPreviewScripture(null);
     setManualInput('');
@@ -152,7 +162,12 @@ const AudioMonitor = () => {
 
   // 1. TOP LEFT: AUDIO INPUT
   const LiveAudioPanel = (
-    <div className="flex flex-col h-full bg-slate-950">
+    <div className="flex flex-col h-full bg-slate-950 relative">
+        {/* FIX LABEL LOCATION */}
+        <div className="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow z-10 animate-pulse">
+            ● LIVE TRANSCRIPT
+        </div>
+
         <div className="bg-slate-800 p-2 border-b border-slate-700 flex justify-between items-center shrink-0">
             <span className="text-xs font-bold text-slate-400">INPUT SOURCE</span>
             <div className={`h-2 w-2 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
@@ -181,8 +196,7 @@ const AudioMonitor = () => {
             </div>
             {searchError && <div className="text-red-400 text-[10px] text-center">{searchError}</div>}
 
-            {/* Version Selectors */}
-            <div className="flex items-center gap-1 mt-auto">
+            <div className="flex items-center gap-1">
               <select value={version} onChange={(e) => setVersion(e.target.value)} className="flex-1 bg-slate-950 text-white text-[10px] font-bold py-1 px-2 rounded border border-slate-600">
                 <option value="KJV">KJV</option><option value="NIV">NIV</option><option value="NKJV">NKJV</option><option value="AMP">AMP</option><option value="ESV">ESV</option><option value="NLT">NLT</option><option value="GW">GW</option>
               </select>
@@ -205,6 +219,19 @@ const AudioMonitor = () => {
                   </div>
               </div>
             )}
+
+            {/* RESTORED FAVORITES BAR */}
+            {favorites.length > 0 && (
+                <div className="pt-2 border-t border-slate-700 mt-auto">
+                    <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none">
+                        {favorites.map((fav, idx) => (
+                            <button key={idx} onClick={() => { handleProject(fav); setActiveScripture(fav); addToHistory(fav); }} className="bg-purple-900/40 hover:bg-purple-800 border border-purple-500/30 text-purple-200 text-[10px] px-2 py-1 rounded min-w-[60px] whitespace-nowrap">
+                                <span className="font-bold block">{fav.reference}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     </div>
   );
@@ -218,18 +245,16 @@ const AudioMonitor = () => {
         </div>
 
         <div className="flex-1 bg-slate-900 p-4 overflow-y-auto space-y-4">
-            {activeDetection ? (
+            {activeScripture ? (
                 <div className="bg-purple-900/20 border border-purple-500/50 p-4 rounded-xl animate-in fade-in slide-in-from-bottom-4 duration-300 relative flex flex-col">
                     <div className="flex justify-between items-start mb-2 shrink-0">
                         <div className="flex items-center gap-2">
-                            <h3 className="text-xl font-bold text-white">{activeDetection.reference} <span className="text-xs font-normal text-purple-300">({activeDetection.version})</span></h3>
-                            <button onClick={() => toggleFavorite(activeDetection)} className={`text-lg hover:scale-110 transition-transform ${isFavorited(activeDetection) ? 'text-yellow-400' : 'text-slate-600 hover:text-yellow-200'}`} title="Favorite">★</button>
+                            <h3 className="text-xl font-bold text-white">{activeScripture.reference} <span className="text-xs font-normal text-purple-300">({activeScripture.version})</span></h3>
+                            <button onClick={() => toggleFavorite(activeScripture)} className={`text-lg hover:scale-110 transition-transform ${isFavorited(activeScripture) ? 'text-yellow-400' : 'text-slate-600 hover:text-yellow-200'}`} title="Favorite">★</button>
                         </div>
-                        <button onClick={() => handleProject(activeDetection)} className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-1.5 rounded font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer text-xs uppercase tracking-widest">PROJECT</button>
+                        <button onClick={() => handleProject(activeScripture)} className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-1.5 rounded font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer text-xs uppercase tracking-widest">PROJECT</button>
                     </div>
-                    <p className="text-purple-100 text-lg leading-relaxed font-serif mb-3 max-h-60 overflow-y-auto border-b border-purple-500/30 pb-3">"{activeDetection.text}"</p>
-
-                    {/* Verse Jump List */}
+                    <p className="text-purple-100 text-lg leading-relaxed font-serif mb-3 max-h-60 overflow-y-auto border-b border-purple-500/30 pb-3">"{activeScripture.text}"</p>
                     {slides.length > 1 && (
                         <div className="flex-1 overflow-y-auto min-h-0 space-y-1 pr-1 custom-scrollbar max-h-40">
                             <h4 className="text-[10px] font-bold text-purple-400 uppercase mb-1 sticky top-0 bg-purple-900/20 backdrop-blur-sm p-1">Verse Selection</h4>
@@ -266,7 +291,7 @@ const AudioMonitor = () => {
                                 <div className="overflow-hidden mr-2"><span className="text-slate-300 font-bold text-xs block">{item.reference}</span><span className="text-slate-500 text-[10px] truncate block">{item.text}</span></div>
                                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button onClick={() => addToScriptureAgenda(item)} className="bg-slate-700 hover:bg-slate-600 text-white text-[10px] px-2 py-1 rounded" title="Add to Agenda">+</button>
-                                    <button onClick={() => { handleProject(item); updateActiveDetection(item); }} className="bg-purple-700 hover:bg-purple-600 text-white text-[10px] px-2 py-1 rounded">Show</button>
+                                    <button onClick={() => { handleProject(item); setActiveScripture(item); }} className="bg-purple-700 hover:bg-purple-600 text-white text-[10px] px-2 py-1 rounded">Show</button>
                                 </div>
                             </div>
                         ))}
@@ -289,7 +314,7 @@ const AudioMonitor = () => {
                 <div className="text-center text-slate-600 mt-10 text-xs italic">Agenda empty.</div>
             ) : (
                 scriptureAgenda.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-2 p-2 bg-slate-800/30 border border-slate-700 rounded group hover:bg-slate-800 transition-colors cursor-pointer" onClick={() => { handleProject(item); updateActiveDetection(item); }}>
+                    <div key={idx} className="flex items-center gap-2 p-2 bg-slate-800/30 border border-slate-700 rounded group hover:bg-slate-800 transition-colors cursor-pointer" onClick={() => { handleProject(item); setActiveScripture(item); }}>
                         <span className="text-xs font-mono text-slate-500 font-bold w-4">{idx + 1}</span>
                         <div className="flex-1 min-w-0">
                             <h4 className="text-sm font-bold text-slate-200 truncate">{item.reference}</h4>
@@ -305,12 +330,15 @@ const AudioMonitor = () => {
 
   // 5. BOTTOM RIGHT: LIVE PREVIEW
   const PreviewPanel = (
-    <div className="flex flex-col h-full bg-black">
-        <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow z-10 animate-pulse">● LIVE PREVIEW</div>
+    <div className="flex flex-col h-full bg-black relative">
+        {/* FIX LABEL LOCATION */}
+        <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow z-10 animate-pulse">
+            ● LIVE PREVIEW
+        </div>
+
         <div className="flex-1 flex items-center justify-center p-4 bg-black overflow-hidden relative">
             {liveScripture ? (
-                // SCALING CONTAINER: We render the renderer at 100% width, then scale it down to fit the preview box
-                // The aspect-ratio is enforced by the parent container logic in SlideRenderer, but here we just need a box of the right shape
+                // SCALING CONTAINER: FIX ASPECT RATIO MATHEMATICALLY
                 <div style={{ width: '100%', aspectRatio: aspectRatio === '12:5' ? '2.4/1' : '16/9' }}>
                     <SlideRenderer
                         content={liveScripture}
@@ -333,7 +361,7 @@ const AudioMonitor = () => {
 
   return (
     <div className="w-full h-[calc(100vh-6rem)] relative">
-        {/* HELP MODAL (Existing) */}
+        {/* HELP MODAL */}
         {showHelp && (
             <div className="absolute inset-0 bg-slate-900/90 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
                 <div className="bg-slate-800 border border-slate-600 rounded-xl p-6 max-w-lg w-full shadow-2xl">
@@ -343,10 +371,8 @@ const AudioMonitor = () => {
                     </div>
                     <div className="space-y-2 text-sm text-slate-300">
                         <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Enter</span> <span>Search / Project Verse</span></div>
-                        <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Esc</span> <span>Clear Screen / Cancel</span></div>
                         <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Alt + P</span> <span>Project Detected Voice Verse</span></div>
-                        <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Right Arrow</span> <span>Next Slide/Verse</span></div>
-                        <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Left Arrow</span> <span>Previous Slide/Verse</span></div>
+                        <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Right/Left Arrow</span> <span>Next/Prev Slide</span></div>
                     </div>
                     <div className="mt-4 text-center"><button onClick={() => setShowHelp(false)} className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded font-bold">Got it!</button></div>
                 </div>

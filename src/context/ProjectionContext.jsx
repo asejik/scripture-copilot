@@ -16,7 +16,9 @@ export const ProjectionProvider = ({ children }) => {
     try { return localStorage.getItem('projection_layout_mode') || 'LOWER_THIRD'; } catch (e) { return 'LOWER_THIRD'; }
   });
 
-  const [theme] = useState({ backgroundColor: '#00b140', textColor: '#ffffff' });
+  const [theme, setTheme] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('projection_theme')) || { backgroundColor: '#00b140', textColor: '#ffffff' }; } catch (e) { return { backgroundColor: '#00b140', textColor: '#ffffff' }; }
+  });
 
   const [textAlign, setTextAlign] = useState(() => {
     try { return localStorage.getItem('projection_text_align') || 'center'; } catch (e) { return 'center'; }
@@ -26,12 +28,21 @@ export const ProjectionProvider = ({ children }) => {
     try { return localStorage.getItem('projection_aspect_ratio') || '16:9'; } catch (e) { return '16:9'; }
   });
 
+  // --- NEW: TEXT CASE & FONT FAMILY ---
+  const [textTransform, setTextTransform] = useState(() => {
+    try { return localStorage.getItem('projection_text_transform') || 'none'; } catch (e) { return 'none'; }
+  });
+
+  const [fontFamily, setFontFamily] = useState(() => {
+    try { return localStorage.getItem('projection_font_family') || 'sans-serif'; } catch (e) { return 'sans-serif'; }
+  });
+  // ------------------------------------
+
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [slides, setSlides] = useState([]);
 
   const channelName = 'scripture_copilot';
 
-  // --- SCRIPTURE LOGIC ---
   const createScriptureSlides = (scripture) => {
     if (!scripture.verseList) {
         let ref = scripture.reference;
@@ -68,16 +79,13 @@ export const ProjectionProvider = ({ children }) => {
     return chunks;
   };
 
-  // --- NEW: SONG LOGIC ---
   const createSongSlides = (song) => {
-    // Split by double newline to get stanzas
     const rawSlides = song.lyrics.split(/\n\n+/).filter(s => s.trim() !== '');
-
     return rawSlides.map((text, index) => ({
         type: 'song',
-        reference: song.title, // Header becomes Title
-        subHeader: song.author, // Optional subheader
-        text: text, // The lyrics
+        reference: song.title,
+        subHeader: song.author,
+        text: text,
         totalSlides: rawSlides.length,
         slideIndex: index + 1
     }));
@@ -97,6 +105,9 @@ export const ProjectionProvider = ({ children }) => {
         } else if (type === 'UPDATE_STYLE') {
           setFontSize(payload.fontSize);
           localStorage.setItem('projection_font_size', payload.fontSize);
+          // Sync new props
+          if(payload.textTransform) { setTextTransform(payload.textTransform); localStorage.setItem('projection_text_transform', payload.textTransform); }
+          if(payload.fontFamily) { setFontFamily(payload.fontFamily); localStorage.setItem('projection_font_family', payload.fontFamily); }
         } else if (type === 'UPDATE_LAYOUT') {
           setLayoutMode(payload.layoutMode);
           localStorage.setItem('projection_layout_mode', payload.layoutMode);
@@ -106,6 +117,9 @@ export const ProjectionProvider = ({ children }) => {
         } else if (type === 'UPDATE_ASPECT') {
           setAspectRatio(payload.aspectRatio);
           localStorage.setItem('projection_aspect_ratio', payload.aspectRatio);
+        } else if (type === 'UPDATE_THEME') {
+          setTheme(payload.theme);
+          localStorage.setItem('projection_theme', JSON.stringify(payload.theme));
         }
       } catch (e) { console.warn("Storage error", e); }
     };
@@ -118,15 +132,12 @@ export const ProjectionProvider = ({ children }) => {
     channel.close();
   };
 
-  // --- ACTIONS ---
-
   const projectScripture = (scripture) => {
     const s = createScriptureSlides(scripture);
     setSlides(s); setCurrentSlideIndex(0);
     updateProjection(s[0]);
   };
 
-  // NEW: Project Song
   const projectSong = (song, startIndex = 0) => {
     const s = createSongSlides(song);
     setSlides(s);
@@ -140,23 +151,39 @@ export const ProjectionProvider = ({ children }) => {
 
   const updateProjection = (s) => { setLiveScripture(s); try { localStorage.setItem('current_scripture', JSON.stringify(s)); } catch(e){} broadcast('UPDATE_SLIDE', s); };
   const clearProjection = () => { setLiveScripture(null); setSlides([]); try { localStorage.removeItem('current_scripture'); } catch(e){} broadcast('CLEAR_SCREEN'); };
-  const updateFontSize = (s) => { setFontSize(s); try { localStorage.setItem('projection_font_size', s); } catch(e){} broadcast('UPDATE_STYLE', { fontSize: s }); };
   const updateLayoutMode = (m) => { setLayoutMode(m); try { localStorage.setItem('projection_layout_mode', m); } catch(e){} broadcast('UPDATE_LAYOUT', { layoutMode: m }); };
   const updateTextAlign = (a) => { setTextAlign(a); try { localStorage.setItem('projection_text_align', a); } catch(e){} broadcast('UPDATE_ALIGN', { textAlign: a }); };
   const updateAspectRatio = (r) => { setAspectRatio(r); try { localStorage.setItem('projection_aspect_ratio', r); } catch(e){} broadcast('UPDATE_ASPECT', { aspectRatio: r }); };
+  const updateTheme = (k, v) => { const t = { ...theme, [k]: v }; setTheme(t); try { localStorage.setItem('projection_theme', JSON.stringify(t)); } catch(e){} broadcast('UPDATE_THEME', { theme: t }); };
+
+  // Update Style (Font size, family, transform)
+  const updateStyle = (newStyle) => {
+      if(newStyle.fontSize) { setFontSize(newStyle.fontSize); try { localStorage.setItem('projection_font_size', newStyle.fontSize); } catch(e){} }
+      if(newStyle.textTransform) { setTextTransform(newStyle.textTransform); try { localStorage.setItem('projection_text_transform', newStyle.textTransform); } catch(e){} }
+      if(newStyle.fontFamily) { setFontFamily(newStyle.fontFamily); try { localStorage.setItem('projection_font_family', newStyle.fontFamily); } catch(e){} }
+
+      broadcast('UPDATE_STYLE', {
+          fontSize: newStyle.fontSize || fontSize,
+          textTransform: newStyle.textTransform || textTransform,
+          fontFamily: newStyle.fontFamily || fontFamily
+      });
+  };
 
   const resetSettings = () => {
-    updateFontSize(60); updateLayoutMode('LOWER_THIRD'); updateTextAlign('center'); updateAspectRatio('16:9');
+    updateStyle({ fontSize: 60, textTransform: 'none', fontFamily: 'sans-serif' });
+    updateLayoutMode('LOWER_THIRD');
+    updateTextAlign('center');
+    updateAspectRatio('16:9');
+    const defaultTheme = { backgroundColor: '#00b140', textColor: '#ffffff' };
+    setTheme(defaultTheme); try { localStorage.setItem('projection_theme', JSON.stringify(defaultTheme)); } catch(e){} broadcast('UPDATE_THEME', { theme: defaultTheme });
   };
 
   return (
     <ProjectionContext.Provider value={{
-        liveScripture,
-        projectScripture,
-        projectSong, // EXPORT NEW FUNCTION
-        clearProjection, nextSlide, prevSlide, currentSlideIndex,
+        liveScripture, projectScripture, projectSong, clearProjection, nextSlide, prevSlide, currentSlideIndex,
         totalSlides: slides.length, slides, jumpToSlide,
-        fontSize, updateFontSize, theme,
+        fontSize, textTransform, fontFamily, updateStyle, // EXPORT NEW
+        theme, updateTheme,
         layoutMode, updateLayoutMode, textAlign, updateTextAlign,
         aspectRatio, updateAspectRatio, resetSettings
     }}>

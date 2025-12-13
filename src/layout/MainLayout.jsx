@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import AudioMonitor from '../features/audio/AudioMonitor';
 import SongDashboard from '../features/songs/SongDashboard';
+import SettingsDashboard from '../features/settings/SettingsDashboard'; // NEW IMPORT
 
 const MainLayout = () => {
-  const [activeTab, setActiveTab] = useState('scripture');
+  const [activeTab, setActiveTab] = useState('scripture'); // 'scripture' | 'songs' | 'settings'
   const [isWakeLockActive, setIsWakeLockActive] = useState(false);
 
-  // Global Wake Lock (Moved from AudioMonitor so it works in Songs mode too)
   useEffect(() => {
     let wakeLock = null;
     const requestWakeLock = async () => {
@@ -38,19 +38,27 @@ const MainLayout = () => {
           <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-800 shadow-inner">
             <button
               onClick={() => setActiveTab('scripture')}
-              className={`px-8 py-2 rounded-md text-sm font-bold transition-all duration-200 flex items-center gap-2
-                ${activeTab === 'scripture' ? 'bg-purple-600 text-white shadow-lg scale-105' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'}
+              className={`px-6 py-2 rounded-md text-sm font-bold transition-all duration-200 flex items-center gap-2
+                ${activeTab === 'scripture' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'}
               `}
             >
               📖 Scriptures
             </button>
             <button
               onClick={() => setActiveTab('songs')}
-              className={`px-8 py-2 rounded-md text-sm font-bold transition-all duration-200 flex items-center gap-2
-                ${activeTab === 'songs' ? 'bg-blue-600 text-white shadow-lg scale-105' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'}
+              className={`px-6 py-2 rounded-md text-sm font-bold transition-all duration-200 flex items-center gap-2
+                ${activeTab === 'songs' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'}
               `}
             >
               🎵 Songs
+            </button>
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`px-6 py-2 rounded-md text-sm font-bold transition-all duration-200 flex items-center gap-2
+                ${activeTab === 'settings' ? 'bg-slate-700 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'}
+              `}
+            >
+              ⚙️ Settings
             </button>
           </div>
 
@@ -69,7 +77,9 @@ const MainLayout = () => {
       {/* --- CONTENT AREA --- */}
       <main className="flex-1 p-6 overflow-hidden">
         <div className="max-w-7xl mx-auto h-full animate-in fade-in duration-300">
-          {activeTab === 'scripture' ? <AudioMonitor /> : <SongDashboard />}
+          {activeTab === 'scripture' && <AudioMonitor />}
+          {activeTab === 'songs' && <SongDashboard />}
+          {activeTab === 'settings' && <SettingsDashboard />}
         </div>
       </main>
 

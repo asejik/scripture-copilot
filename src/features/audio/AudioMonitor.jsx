@@ -13,13 +13,6 @@ import esvData from '../../data/esv.json';
 import nltData from '../../data/nlt.json';
 import gwData from '../../data/gw.json';
 
-const THEMES = {
-  'Green': { backgroundColor: '#00b140', textColor: '#ffffff' },
-  'Blue': { backgroundColor: '#0047b1', textColor: '#ffffff' },
-  'Black': { backgroundColor: '#000000', textColor: '#ffffff' },
-  'White': { backgroundColor: '#ffffff', textColor: '#000000' },
-};
-
 const AudioMonitor = () => {
   const [version, setVersion] = useState(() => localStorage.getItem('bible_version') || 'KJV');
   const [secondaryVersion, setSecondaryVersion] = useState(() => localStorage.getItem('bible_version_sec') || 'NONE');
@@ -62,7 +55,8 @@ const AudioMonitor = () => {
     }
   }, [version, currentBibleData]);
 
-  const { projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex, slides, jumpToSlide, fontSize, updateFontSize, layoutMode, updateLayoutMode, textAlign, updateTextAlign, aspectRatio, updateAspectRatio, resetSettings, updateTheme } = useProjection();
+  // Removed layout/style setters from here, only need projection controls
+  const { projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex, slides, jumpToSlide } = useProjection();
 
   const bottomRef = useRef(null);
   useEffect(() => { if (bottomRef.current) bottomRef.current.scrollIntoView({ behavior: 'smooth' }); }, [transcript, interimTranscript]);
@@ -140,12 +134,11 @@ const AudioMonitor = () => {
     if (exists) setFavorites(prev => prev.filter(f => !(f.reference === scripture.reference && f.version === scripture.version))); else setFavorites(prev => [scripture, ...prev]);
   };
   const isFavorited = (scripture) => { if (!scripture) return false; return favorites.some(f => f.reference === scripture.reference && f.version === scripture.version); };
-  const applyPreset = (presetName) => { const p = THEMES[presetName]; if (p) { updateTheme('backgroundColor', p.backgroundColor); updateTheme('textColor', p.textColor); } };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-7xl mx-auto h-[calc(100vh-8rem)] relative">
 
-      {/* --- HELP MODAL --- */}
+      {/* HELP MODAL (Unchanged) */}
       {showHelp && (
         <div className="absolute inset-0 bg-slate-900/90 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
             <div className="bg-slate-800 border border-slate-600 rounded-xl p-6 max-w-lg w-full shadow-2xl">
@@ -159,7 +152,6 @@ const AudioMonitor = () => {
                     <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Alt + P</span> <span>Project Detected Voice Verse</span></div>
                     <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Right Arrow</span> <span>Next Slide/Verse</span></div>
                     <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Left Arrow</span> <span>Previous Slide/Verse</span></div>
-                    <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Shift + ?</span> <span>Show This Help</span></div>
                 </div>
                 <div className="mt-4 text-center"><button onClick={() => setShowHelp(false)} className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded font-bold">Got it!</button></div>
             </div>
@@ -249,23 +241,9 @@ const AudioMonitor = () => {
                 </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 text-sm bg-slate-950 p-2 rounded border border-slate-800">
-                <select value={layoutMode} onChange={(e) => updateLayoutMode(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="LOWER_THIRD">Lower Third</option><option value="CENTER">Center</option></select>
-                <select value={aspectRatio} onChange={(e) => updateAspectRatio(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="16:9">16:9</option><option value="12:5">12:5 (Ultra)</option></select>
-                <div className="w-px h-4 bg-slate-700 mx-1"></div>
-                <select value={textAlign} onChange={(e) => updateTextAlign(e.target.value)} className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justify</option></select>
-                <div className="w-px h-4 bg-slate-700 mx-1"></div>
-
-                <div className="flex items-center gap-1" title="Font Size"><span className="text-xs text-slate-400">Aa</span><input type="range" min="30" max="120" value={fontSize} onChange={(e) => updateFontSize(parseInt(e.target.value))} className="w-16 accent-purple-500 cursor-pointer" /></div>
-                <div className="w-px h-4 bg-slate-700 mx-1"></div>
-
-                <select onChange={(e) => applyPreset(e.target.value)} defaultValue="" className="bg-slate-800 text-white text-xs py-1 px-2 rounded border border-slate-600 cursor-pointer focus:border-purple-500 focus:outline-none w-20">
-                    <option value="" disabled>Presets</option>
-                    {Object.keys(THEMES).map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-
-                <div className="w-px h-4 bg-slate-700 mx-1"></div>
-                <button onClick={() => { if(confirm('Reset all theme settings to default?')) resetSettings(); }} className="text-xs bg-red-900/30 hover:bg-red-900 text-red-400 hover:text-white px-2 py-1 rounded transition-colors cursor-pointer" title="Reset to Factory Defaults">⟳ Reset</button>
+            {/* CLEANED UP: Settings bar removed (Now in Settings Tab) */}
+            <div className="bg-slate-950 p-2 rounded border border-slate-800 text-center">
+                <span className="text-[10px] text-slate-500 italic">Visual settings moved to ⚙️ Settings Tab</span>
             </div>
         </div>
 

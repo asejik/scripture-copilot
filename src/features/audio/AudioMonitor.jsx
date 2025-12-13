@@ -17,6 +17,58 @@ import esvData from '../../data/esv.json';
 import nltData from '../../data/nlt.json';
 import gwData from '../../data/gw.json';
 
+// --- NEW COMPONENT: SCALED PREVIEW WRAPPER ---
+// This forces the renderer to think it is on a 1920px screen, then shrinks the result.
+const ScaledPreview = ({ children, aspectRatio }) => {
+    const containerRef = useRef(null);
+    const [scale, setScale] = useState(1);
+
+    // Standard Projector Width
+    const VIRTUAL_WIDTH = 1920;
+
+    // Calculate Height based on Ratio (12:5 = 2.4, 16:9 = 1.77)
+    const ratio = aspectRatio === '12:5' ? 2.4 : (16/9);
+    const VIRTUAL_HEIGHT = VIRTUAL_WIDTH / ratio;
+
+    useLayoutEffect(() => {
+        const updateScale = () => {
+            if (containerRef.current) {
+                const availableWidth = containerRef.current.offsetWidth;
+                const newScale = availableWidth / VIRTUAL_WIDTH;
+                setScale(newScale);
+            }
+        };
+
+        // Initial Calc
+        updateScale();
+
+        // Update on Resize
+        const observer = new ResizeObserver(updateScale);
+        if (containerRef.current) observer.observe(containerRef.current);
+
+        return () => observer.disconnect();
+    }, [aspectRatio]);
+
+    return (
+        <div
+            ref={containerRef}
+            className="w-full h-full flex items-center justify-center overflow-hidden bg-black"
+        >
+            <div
+                style={{
+                    width: `${VIRTUAL_WIDTH}px`,
+                    height: `${VIRTUAL_HEIGHT}px`,
+                    transform: `scale(${scale})`,
+                    transformOrigin: 'center center',
+                    flexShrink: 0 // Prevent crushing
+                }}
+            >
+                {children}
+            </div>
+        </div>
+    );
+};
+
 const AudioMonitor = () => {
   const [version, setVersion] = useState(() => localStorage.getItem('bible_version') || 'KJV');
   const [secondaryVersion, setSecondaryVersion] = useState(() => localStorage.getItem('bible_version_sec') || 'NONE');
@@ -31,7 +83,6 @@ const AudioMonitor = () => {
 
   const [favorites, setFavorites] = useState(() => { try { return JSON.parse(localStorage.getItem('saved_favorites')) || []; } catch (e) { return []; }});
 
-  // Use Global Store
   const {
       scriptureAgenda, addToScriptureAgenda, removeFromScriptureAgenda, clearScriptureAgenda,
       sessionHistory, activeDetection, addToHistory, clearHistory, updateActiveDetection
@@ -58,9 +109,7 @@ const AudioMonitor = () => {
   const [activeScripture, setActiveScripture] = useState(null);
 
   useEffect(() => {
-      if (activeDetection) {
-          setActiveScripture(activeDetection);
-      }
+      if (activeDetection) setActiveScripture(activeDetection);
   }, []);
 
   useEffect(() => {
@@ -170,15 +219,13 @@ const AudioMonitor = () => {
   };
   const isFavorited = (scripture) => { if (!scripture) return false; return favorites.some(f => f.reference === scripture.reference && f.version === scripture.version); };
 
-  // --- COLUMN CONTENT BLOCKS ---
+  // --- PANELS ---
 
-  // 1. TOP LEFT: AUDIO INPUT
   const LiveAudioPanel = (
     <div className="flex flex-col h-full bg-slate-950 relative">
         <div className="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow z-10 animate-pulse">
             ● LIVE TRANSCRIPT
         </div>
-
         <div className="bg-slate-800 p-2 border-b border-slate-700 flex justify-between items-center shrink-0">
             <span className="text-xs font-bold text-slate-400">INPUT SOURCE</span>
             <div className={`h-2 w-2 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
@@ -190,7 +237,6 @@ const AudioMonitor = () => {
     </div>
   );
 
-  // 2. BOTTOM LEFT: SEARCH & CONTROLS
   const SearchPanel = (
     <div className="flex flex-col h-full bg-slate-900 border-t border-slate-700">
         <div className="p-3 flex flex-col gap-2 h-full">
@@ -201,14 +247,7 @@ const AudioMonitor = () => {
 
             <div className="relative">
                 <form onSubmit={handleManualSearch} className="flex gap-1">
-                    <input
-                        type="text"
-                        value={manualInput}
-                        onChange={handleInputChange}
-                        placeholder="Search Scripture (e.g. John 3:16)..."
-                        className="flex-1 bg-slate-950 text-white border border-slate-600 rounded px-2 py-3 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-600"
-                        autoComplete="off"
-                    />
+                    <input type="text" value={manualInput} onChange={handleInputChange} placeholder="Search Scripture (e.g. John 3:16)..." className="flex-1 bg-slate-950 text-white border border-slate-600 rounded px-2 py-3 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-600" autoComplete="off" />
                     <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm">GO</button>
                 </form>
                 {showSuggestions && suggestions.length > 0 && <ul className="absolute bottom-full left-0 w-full bg-slate-800 border border-slate-600 rounded-lg shadow-xl mb-1 max-h-40 overflow-y-auto z-50">{suggestions.map((suggestion, index) => ( <li key={suggestion} onClick={() => selectSuggestion(suggestion)} className={`px-3 py-2 text-xs cursor-pointer ${index === activeSuggestionIndex ? 'bg-purple-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>{suggestion}</li> ))}</ul>}
@@ -255,7 +294,6 @@ const AudioMonitor = () => {
     </div>
   );
 
-  // 3. MIDDLE COLUMN: DETECTED & ACTIVE
   const middleColumn = (
     <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-full">
         <div className="bg-slate-800 p-3 border-b border-slate-700 flex justify-between items-center shrink-0">
@@ -271,14 +309,12 @@ const AudioMonitor = () => {
                             <h3 className="text-xl font-bold text-white">{activeScripture.reference} <span className="text-xs font-normal text-purple-300">({activeScripture.version})</span></h3>
                             <button onClick={() => toggleFavorite(activeScripture)} className={`text-lg hover:scale-110 transition-transform ${isFavorited(activeScripture) ? 'text-yellow-400' : 'text-slate-600 hover:text-yellow-200'}`} title="Favorite">★</button>
                         </div>
-
                         <div className="flex gap-2">
                             <button onClick={() => handleAddToAgenda(activeScripture)} className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded font-bold text-xs transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-sm" title="Add to Agenda">+ Agenda</button>
                             <button onClick={() => handleProject(activeScripture)} className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-1.5 rounded font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer text-xs uppercase tracking-widest">PROJECT</button>
                         </div>
                     </div>
                     <p className="text-purple-100 text-lg leading-relaxed font-serif mb-3 max-h-60 overflow-y-auto border-b border-purple-500/30 pb-3">"{activeScripture.text}"</p>
-
                     {slides.length > 1 && (
                         <div className="flex-1 overflow-y-auto min-h-0 space-y-1 pr-1 custom-scrollbar max-h-40">
                             <h4 className="text-[10px] font-bold text-purple-400 uppercase mb-1 sticky top-0 bg-purple-900/20 backdrop-blur-sm p-1">Verse Selection</h4>
@@ -326,7 +362,6 @@ const AudioMonitor = () => {
     </div>
   );
 
-  // 4. TOP RIGHT: AGENDA
   const AgendaPanel = (
     <div className="flex flex-col h-full bg-slate-900">
         <div className="bg-slate-800 p-3 border-b border-slate-700 flex justify-between items-center">
@@ -338,30 +373,20 @@ const AudioMonitor = () => {
                 <div className="text-center text-slate-600 mt-10 text-xs italic">Agenda empty.</div>
             ) : (
                 scriptureAgenda.map((item, idx) => (
-                    // FIX: Click -> handleLoadPreview (Don't project yet)
                     <div
                         key={idx}
                         className="p-2 bg-slate-800/30 border border-slate-700 rounded flex justify-between items-center group hover:bg-slate-800 transition-colors cursor-pointer"
                         onClick={() => handleLoadPreview(item)}
                     >
                         <div className="overflow-hidden mr-2 flex-1 min-w-0">
-                            {/* Header: Ref + Version */}
                             <span className="text-slate-300 font-bold text-xs block truncate">
                                 {item.reference} <span className="text-slate-500 font-normal">({item.version})</span>
                             </span>
-                            {/* Body: Preview Text */}
                             <span className="text-slate-500 text-[10px] truncate block">
                                 {item.text}
                             </span>
                         </div>
-
-                        {/* Delete Button */}
-                        <button
-                            onClick={(e) => { e.stopPropagation(); removeFromScriptureAgenda(item.agendaId); }}
-                            className="text-slate-500 hover:text-red-400 px-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                            ×
-                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); removeFromScriptureAgenda(item.agendaId); }} className="text-slate-500 hover:text-red-400 px-2 opacity-0 group-hover:opacity-100 transition-opacity">×</button>
                     </div>
                 ))
             )}
@@ -369,50 +394,30 @@ const AudioMonitor = () => {
     </div>
   );
 
-  // 5. BOTTOM RIGHT: LIVE PREVIEW
   const PreviewPanel = (
     <div className="flex flex-col h-full bg-black relative">
         <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow z-10 animate-pulse">
             ● LIVE PREVIEW
         </div>
 
-        {/* SCALED PREVIEW CONTAINER */}
-        <div className="flex-1 flex items-center justify-center p-4 bg-black overflow-hidden relative">
-            <div
-                className="relative origin-center"
-                style={{
-                    // This container simulates the projector screen aspect ratio
-                    // It scales down the SlideRenderer to fit the available space
-                    width: '100%',
-                    maxWidth: '100%',
-                    aspectRatio: aspectRatio === '12:5' ? '2.4 / 1' : '16 / 9',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                }}
-            >
-                {/* KEY FIX: SCALED PREVIEW RENDERER
-                   We render the SlideRenderer inside a container that forces it to behave like the real output,
-                   but we don't need CSS transform scale if we use % padding/sizes correctly in SlideRenderer.
-                   The SlideRenderer updates we did previously (px -> %) should handle this automatically now.
-                */}
-                 {liveScripture ? (
-                    <SlideRenderer
-                        content={liveScripture}
-                        theme={theme}
-                        fontSize={fontSize}
-                        layoutMode={layoutMode}
-                        textAlign={textAlign}
-                        aspectRatio={aspectRatio}
-                        fontFamily={fontFamily}
-                        textTransform={textTransform}
-                        isPreview={true}
-                    />
-                ) : (
-                    <div className="text-white/20 font-mono text-xs text-center">[ WAITING ]</div>
-                )}
-            </div>
-        </div>
+        {/* THIS IS THE MAGIC: SCALED PREVIEW COMPONENT */}
+        <ScaledPreview aspectRatio={aspectRatio}>
+             {liveScripture ? (
+                <SlideRenderer
+                    content={liveScripture}
+                    theme={theme}
+                    fontSize={fontSize}
+                    layoutMode={layoutMode}
+                    textAlign={textAlign}
+                    aspectRatio={aspectRatio}
+                    fontFamily={fontFamily}
+                    textTransform={textTransform}
+                    isPreview={false} // RENDER AS IF FULL SIZE
+                />
+            ) : (
+                <div className="w-full h-full flex items-center justify-center text-white/20 font-mono text-4xl">[ WAITING ]</div>
+            )}
+        </ScaledPreview>
     </div>
   );
 

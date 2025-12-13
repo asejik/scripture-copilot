@@ -372,7 +372,8 @@ const AudioMonitor = () => {
                         aspectRatio={aspectRatio}
                         fontFamily={fontFamily}
                         textTransform={textTransform}
-                        isPreview={false}
+                        // FIX: Must be TRUE to enable Drag-and-Drop
+                        isPreview={true}
                     />
                 </ScaledPreview>
             ) : (

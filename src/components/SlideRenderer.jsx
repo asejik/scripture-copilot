@@ -3,17 +3,14 @@ import { useProjection } from '../context/ProjectionContext';
 
 const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspectRatio, fontFamily, textTransform, isPreview = false }) => {
   const containerRef = useRef(null);
-
-  // NEW: Ref for the Header to measure dragging
   const headerRef = useRef(null);
 
   const { headerPosition, headerFontSize, updateHeaderPosition, backgroundTransparent, headerBackgroundEnabled } = useProjection();
 
   // DRAG STATE
   const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
-  // Auto-shrink logic (Unchanged)
+  // Auto-shrink logic
   useLayoutEffect(() => {
     if (!containerRef.current) return;
     const el = containerRef.current;
@@ -33,18 +30,11 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
 
   // DRAG HANDLERS
   const handleMouseDown = (e) => {
-      // Only allow drag in Preview Mode
+      // FIX: Only allow drag if isPreview is TRUE
       if (!isPreview) return;
 
       e.preventDefault();
       setIsDragging(true);
-
-      // Calculate offset so we don't snap the corner to the mouse
-      const rect = headerRef.current.getBoundingClientRect();
-      setDragOffset({
-          x: e.clientX - rect.left - (rect.width / 2),
-          y: e.clientY - rect.top - (rect.height / 2)
-      });
   };
 
   useEffect(() => {
@@ -54,20 +44,19 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
         if (!containerRef.current) return;
 
         // Get the Parent Container (The Green Box)
-        // We need to traverse up to find the root aspect-ratio box
-        // A safer way is to assume the parent of the whole component
+        // We traverse up to find the container that holds the background color
         const parent = containerRef.current.parentElement.parentElement;
         const parentRect = parent.getBoundingClientRect();
 
         // Calculate Position relative to Parent (0-100%)
+        // This math works even if the preview is Scaled/Zoomed out!
         let x = ((e.clientX - parentRect.left) / parentRect.width) * 100;
         let y = ((e.clientY - parentRect.top) / parentRect.height) * 100;
 
-        // Clamp values to keep inside screen
+        // Clamp values 0-100
         x = Math.max(0, Math.min(100, x));
         y = Math.max(0, Math.min(100, y));
 
-        // Update Global State (This syncs preview and output instantly)
         updateHeaderPosition({ x, y });
     };
 
@@ -89,14 +78,11 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
   const hasSecondary = !!content.secondaryText;
 
   // Use Coordinates
-  const pos = headerPosition || { x: 50, y: 6 }; // Default if null
+  const pos = headerPosition || { x: 50, y: 6 };
 
-  // Determine Alignment for styling based on X position
-  // If > 70% Right, align right. If < 30% Left, align left. Else Center.
-  let stackAlignItems = 'center';
-  // We don't use this for the header anymore, only for the text body below.
-
-  const calcHeaderSize = isPreview ? `${headerFontSize * 0.6}px` : `${headerFontSize}px`;
+  // FIX: Always render full size font.
+  // ScaledPreview component handles the visual shrinking for the dashboard.
+  const calcHeaderSize = `${headerFontSize}px`;
 
   return (
     // MAIN CONTAINER
@@ -120,20 +106,22 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
                 position: 'absolute',
                 left: `${pos.x}%`,
                 top: `${pos.y}%`,
-                transform: 'translate(-50%, -50%)', // Always center anchor point
+                transform: 'translate(-50%, -50%)',
                 zIndex: 100,
-                cursor: isPreview ? (isDragging ? 'grabbing' : 'grab') : 'default',
+                // Cursor changes to indicate draggable state
+                cursor: isPreview ? (isDragging ? 'grabbing' : 'grab') : 'none',
 
                 // Style
                 backgroundColor: headerBackgroundEnabled ? (theme.headerBackgroundColor || '#000000') : 'transparent',
                 color: theme.headerTextColor || '#ffffff',
                 fontSize: calcHeaderSize,
-                padding: isPreview ? '0.1em 0.3em' : '0.15em 0.6em',
+                // FIX: Use standard padding. ScaledPreview will shrink it visually.
+                padding: '0.15em 0.6em',
                 fontWeight: 'bold',
                 borderRadius: '0.2em',
                 boxShadow: headerBackgroundEnabled ? '0 4px 6px -1px rgba(0, 0, 0, 0.3)' : 'none',
                 whiteSpace: 'nowrap',
-                userSelect: 'none' // Prevent text selection while dragging
+                userSelect: 'none'
             }}
         >
             {content.reference}

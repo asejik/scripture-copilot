@@ -15,31 +15,19 @@ const SYSTEM_FONTS = [
   { name: 'Impact', value: 'Impact, sans-serif' },
 ];
 
-const THEMES = {
-  'Green Screen': { backgroundColor: '#00b140', textColor: '#ffffff' },
-  'Blue Stream': { backgroundColor: '#0047b1', textColor: '#ffffff' },
-  'Stage Black': { backgroundColor: '#000000', textColor: '#ffffff' },
-  'Paper White': { backgroundColor: '#ffffff', textColor: '#000000' },
-};
-
 const SettingsDashboard = () => {
   const {
     fontSize, updateStyle, textTransform, fontFamily,
     layoutMode, updateLayoutMode,
     textAlign, updateTextAlign,
     aspectRatio, updateAspectRatio,
-    updateTheme, resetSettings
+    theme, updateTheme, resetSettings
   } = useProjection();
-
-  const applyPreset = (presetName) => {
-    const p = THEMES[presetName];
-    if (p) { updateTheme('backgroundColor', p.backgroundColor); updateTheme('textColor', p.textColor); }
-  };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
 
-      {/* --- COLUMN 1: LAYOUT & DISPLAY --- */}
+      {/* --- COLUMN 1: LAYOUT & COLORS --- */}
       <div className="space-y-6">
         <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 shadow-xl">
           <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">📺 Display Layout</h2>
@@ -63,28 +51,63 @@ const SettingsDashboard = () => {
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Screen Ratio</label>
-              <select value={aspectRatio} onChange={(e) => updateAspectRatio(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded p-3 text-white focus:border-purple-500 outline-none">
-                <option value="16:9">16:9 (Standard TV/Projector)</option>
-                <option value="12:5">12:5 (Ultra-Wide LED Wall)</option>
-              </select>
-            </div>
+            {/* HIDE Screen Ratio if Lower Third is selected */}
+            {layoutMode !== 'LOWER_THIRD' && (
+                <div className="animate-in fade-in slide-in-from-top-2">
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Screen Ratio</label>
+                <select value={aspectRatio} onChange={(e) => updateAspectRatio(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded p-3 text-white focus:border-purple-500 outline-none">
+                    <option value="16:9">16:9 (Standard TV/Projector)</option>
+                    <option value="12:5">12:5 (Ultra-Wide LED Wall)</option>
+                </select>
+                </div>
+            )}
           </div>
         </div>
 
         <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 shadow-xl">
-          <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">🎨 Colors & Themes</h2>
+          <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">🎨 Custom Colors</h2>
 
-          <div className="space-y-4">
+          <div className="space-y-6">
+
+            {/* Header Colors */}
             <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Quick Presets</label>
-                <div className="grid grid-cols-2 gap-2">
-                    {Object.keys(THEMES).map(t => (
-                        <button key={t} onClick={() => applyPreset(t)} className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs py-2 px-3 rounded border border-slate-700 transition-colors">
-                            {t}
-                        </button>
-                    ))}
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-2 border-b border-slate-700 pb-1">Title / Header Box</label>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <span className="text-[10px] text-slate-500 mb-1 block">Background</span>
+                        <div className="flex items-center gap-2 bg-slate-950 p-2 rounded border border-slate-700">
+                            <input type="color" value={theme.headerBackgroundColor || '#581c87'} onChange={(e) => updateTheme({ headerBackgroundColor: e.target.value })} className="w-8 h-8 rounded cursor-pointer border-none bg-transparent" />
+                            <span className="text-xs font-mono">{theme.headerBackgroundColor}</span>
+                        </div>
+                    </div>
+                    <div>
+                        <span className="text-[10px] text-slate-500 mb-1 block">Text Color</span>
+                        <div className="flex items-center gap-2 bg-slate-950 p-2 rounded border border-slate-700">
+                            <input type="color" value={theme.headerTextColor || '#ffffff'} onChange={(e) => updateTheme({ headerTextColor: e.target.value })} className="w-8 h-8 rounded cursor-pointer border-none bg-transparent" />
+                            <span className="text-xs font-mono">{theme.headerTextColor}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Body Colors */}
+            <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-2 border-b border-slate-700 pb-1">Lyrics / Scripture Body</label>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <span className="text-[10px] text-slate-500 mb-1 block">Background</span>
+                        <div className="flex items-center gap-2 bg-slate-950 p-2 rounded border border-slate-700">
+                            <input type="color" value={theme.backgroundColor || '#0f172a'} onChange={(e) => updateTheme({ backgroundColor: e.target.value })} className="w-8 h-8 rounded cursor-pointer border-none bg-transparent" />
+                            <span className="text-xs font-mono">{theme.backgroundColor}</span>
+                        </div>
+                    </div>
+                    <div>
+                        <span className="text-[10px] text-slate-500 mb-1 block">Text Color</span>
+                        <div className="flex items-center gap-2 bg-slate-950 p-2 rounded border border-slate-700">
+                            <input type="color" value={theme.textColor || '#ffffff'} onChange={(e) => updateTheme({ textColor: e.target.value })} className="w-8 h-8 rounded cursor-pointer border-none bg-transparent" />
+                            <span className="text-xs font-mono">{theme.textColor}</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -97,26 +120,19 @@ const SettingsDashboard = () => {
         </div>
       </div>
 
-      {/* --- COLUMN 2: TYPOGRAPHY --- */}
+      {/* --- COLUMN 2: TYPOGRAPHY (Unchanged, just kept for context) --- */}
       <div className="space-y-6">
         <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 shadow-xl">
           <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">Aa Typography</h2>
 
           <div className="space-y-6">
-
-            {/* Font Family */}
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Font Family (System)</label>
+              <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Font Family</label>
               <select value={fontFamily} onChange={(e) => updateStyle({ fontFamily: e.target.value })} className="w-full bg-slate-950 border border-slate-700 rounded p-3 text-white focus:border-purple-500 outline-none font-sans">
-                {SYSTEM_FONTS.map(font => (
-                    <option key={font.value} value={font.value} style={{ fontFamily: font.value }}>
-                        {font.name} (Preview)
-                    </option>
-                ))}
+                {SYSTEM_FONTS.map(font => ( <option key={font.value} value={font.value} style={{ fontFamily: font.value }}>{font.name}</option> ))}
               </select>
             </div>
 
-            {/* Text Case */}
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Text Casing</label>
               <div className="grid grid-cols-3 gap-2">
@@ -126,7 +142,6 @@ const SettingsDashboard = () => {
               </div>
             </div>
 
-            {/* Text Align */}
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Alignment</label>
               <select value={textAlign} onChange={(e) => updateTextAlign(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded p-3 text-white focus:border-purple-500 outline-none">
@@ -137,21 +152,13 @@ const SettingsDashboard = () => {
               </select>
             </div>
 
-            {/* Font Size */}
             <div>
                <div className="flex justify-between items-end mb-2">
                     <label className="block text-xs font-bold text-slate-400 uppercase">Base Font Size</label>
                     <span className="text-xs font-mono text-purple-400">{fontSize}px</span>
                </div>
-               <input
-                 type="range" min="30" max="120" step="2"
-                 value={fontSize}
-                 onChange={(e) => updateStyle({ fontSize: parseInt(e.target.value) })}
-                 className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
-               />
-               <p className="text-[10px] text-slate-500 mt-2">Note: Text will auto-shrink if it exceeds the screen bounds.</p>
+               <input type="range" min="30" max="120" step="2" value={fontSize} onChange={(e) => updateStyle({ fontSize: parseInt(e.target.value) })} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500" />
             </div>
-
           </div>
         </div>
       </div>

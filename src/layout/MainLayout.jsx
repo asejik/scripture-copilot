@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useProjection } from '../context/ProjectionContext'; // Import context
 import AudioMonitor from '../features/audio/AudioMonitor';
 import SongDashboard from '../features/songs/SongDashboard';
-import SettingsDashboard from '../features/settings/SettingsDashboard'; // NEW IMPORT
+import SettingsDashboard from '../features/settings/SettingsDashboard';
 
 const MainLayout = () => {
-  const [activeTab, setActiveTab] = useState('scripture'); // 'scripture' | 'songs' | 'settings'
+  const { clearProjection } = useProjection(); // Get clear function
+  const [activeTab, setActiveTab] = useState('scripture');
   const [isWakeLockActive, setIsWakeLockActive] = useState(false);
 
   useEffect(() => {
@@ -39,7 +41,7 @@ const MainLayout = () => {
             <button
               onClick={() => setActiveTab('scripture')}
               className={`px-6 py-2 rounded-md text-sm font-bold transition-all duration-200 flex items-center gap-2
-                ${activeTab === 'scripture' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'}
+                ${activeTab === 'scripture' ? 'bg-purple-600 text-white shadow-lg scale-105' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'}
               `}
             >
               📖 Scriptures
@@ -47,7 +49,7 @@ const MainLayout = () => {
             <button
               onClick={() => setActiveTab('songs')}
               className={`px-6 py-2 rounded-md text-sm font-bold transition-all duration-200 flex items-center gap-2
-                ${activeTab === 'songs' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'}
+                ${activeTab === 'songs' ? 'bg-blue-600 text-white shadow-lg scale-105' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'}
               `}
             >
               🎵 Songs
@@ -62,14 +64,21 @@ const MainLayout = () => {
             </button>
           </div>
 
-          {/* STATUS AREA */}
+          {/* STATUS AREA & GLOBAL CLEAR */}
           <div className="w-1/4 flex justify-end items-center gap-3">
+             {/* GLOBAL CLEAR BUTTON */}
+             <button
+                onClick={clearProjection}
+                className="bg-red-600 hover:bg-red-500 text-white text-xs font-bold px-4 py-2 rounded shadow-lg transition-transform active:scale-95 animate-in fade-in"
+             >
+                ✖ CLEAR PROJECTOR
+             </button>
+
              {isWakeLockActive && (
                 <span className="flex items-center gap-1 text-[10px] bg-green-900/30 text-green-400 px-2 py-1 rounded border border-green-900/50">
-                  🔒 Awake
+                  🔒
                 </span>
              )}
-             <div className="h-2 w-2 rounded-full bg-slate-700" title="System Ready"></div>
           </div>
         </div>
       </header>

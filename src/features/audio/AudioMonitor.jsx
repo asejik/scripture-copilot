@@ -184,7 +184,6 @@ const AudioMonitor = () => {
         <div className="p-4 bg-slate-800 border-t border-slate-700 flex flex-col gap-3 shrink-0">
             <div className="flex gap-3">
                 <button onClick={isListening ? stopListening : startListening} className={`px-4 py-2 rounded-lg font-medium text-white transition-colors cursor-pointer flex-1 ${isListening ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>{isListening ? 'Stop Mic' : 'Start Mic'}</button>
-                <button onClick={resetTranscript} className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg hover:bg-slate-600 cursor-pointer">Clear Text</button>
             </div>
             <div className="relative">
                 <form onSubmit={handleManualSearch} className="flex gap-2">
@@ -239,11 +238,6 @@ const AudioMonitor = () => {
                     <button onClick={() => setShowHelp(true)} className="text-slate-400 hover:text-white px-2" title="Keyboard Shortcuts">❓</button>
                     <button onClick={clearProjection} className="text-xs bg-slate-700 hover:bg-red-600 text-white px-3 py-1 rounded transition-colors cursor-pointer" title="[Esc]">Clear</button>
                 </div>
-            </div>
-
-            {/* CLEANED UP: Settings bar removed (Now in Settings Tab) */}
-            <div className="bg-slate-950 p-2 rounded border border-slate-800 text-center">
-                <span className="text-[10px] text-slate-500 italic">Visual settings moved to ⚙️ Settings Tab</span>
             </div>
         </div>
 

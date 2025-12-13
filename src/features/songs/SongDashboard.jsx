@@ -119,7 +119,6 @@ const SongDashboard = () => {
                         <p className="text-xs text-slate-400">{activeSong.author}</p>
                     </div>
                     <div className="flex gap-2">
-                        <button onClick={clearProjection} className="text-xs bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded transition-colors cursor-pointer font-bold">CLEAR SCREEN</button>
                         <div className="w-px h-6 bg-slate-600 mx-1"></div>
                         <button onClick={() => deleteSong(activeSong.id)} className="text-xs bg-red-900/30 hover:bg-red-900 text-red-400 hover:text-white px-3 py-1 rounded transition-colors cursor-pointer">Delete</button>
                         <button onClick={() => handleEdit(activeSong)} className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1 rounded transition-colors cursor-pointer">✎ Edit</button>

@@ -4,6 +4,8 @@ import useScriptureDetection from '../../hooks/useScriptureDetection';
 import { useProjection } from '../../context/ProjectionContext';
 import { normalizeSpokenText } from '../../utils/textNormalizer';
 import { parseScripture, fetchSecondaryText } from '../../utils/scriptureParser';
+import useSongLibrary from '../../hooks/useSongLibrary'; // NEW: For Agenda
+import ResizableGrid from '../../components/ResizableGrid'; // NEW: Layout
 
 import kjvData from '../../data/kjv.json';
 import nivData from '../../data/niv.json';
@@ -19,13 +21,15 @@ const AudioMonitor = () => {
   const [manualInput, setManualInput] = useState('');
   const [searchError, setSearchError] = useState(null);
   const [previewScripture, setPreviewScripture] = useState(null);
-
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
 
   const [favorites, setFavorites] = useState(() => { try { return JSON.parse(localStorage.getItem('saved_favorites')) || []; } catch (e) { return []; }});
+
+  // NEW: Agenda Hook
+  const { scriptureAgenda, addToScriptureAgenda, removeFromScriptureAgenda, clearScriptureAgenda } = useSongLibrary();
 
   useEffect(() => { localStorage.setItem('bible_version', version); }, [version]);
   useEffect(() => { localStorage.setItem('bible_version_sec', secondaryVersion); }, [secondaryVersion]);
@@ -55,7 +59,6 @@ const AudioMonitor = () => {
     }
   }, [version, currentBibleData]);
 
-  // Pull liveScripture for the Preview Box
   const { projectScripture, projectSong, liveScripture, nextSlide, prevSlide, currentSlideIndex, slides, jumpToSlide, theme, fontFamily, textTransform } = useProjection();
 
   const bottomRef = useRef(null);
@@ -121,6 +124,12 @@ const AudioMonitor = () => {
 
   const confirmProjection = () => { if (previewScripture) handleProject(previewScripture); };
 
+  const handleAddToAgenda = (scripture) => {
+      addToScriptureAgenda(scripture);
+      setPreviewScripture(null);
+      setManualInput('');
+  }
+
   const exportHistory = () => {
     if (history.length === 0) return; const date = new Date().toLocaleDateString(); let content = `SERMON SCRIPTURE NOTES - ${date}\n\n`;
     [...history].reverse().forEach((item, index) => { content += `${index + 1}. ${item.reference} (${item.version})\n`; content += `"${item.text}"\n\n`; });
@@ -134,109 +143,90 @@ const AudioMonitor = () => {
   };
   const isFavorited = (scripture) => { if (!scripture) return false; return favorites.some(f => f.reference === scripture.reference && f.version === scripture.version); };
 
-  return (
-    <div className="grid grid-cols-12 gap-6 w-full h-[calc(100vh-6rem)] relative">
+  // --- COLUMN CONTENT ---
 
-      {/* HELP MODAL */}
-      {showHelp && (
-        <div className="absolute inset-0 bg-slate-900/90 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-slate-800 border border-slate-600 rounded-xl p-6 max-w-lg w-full shadow-2xl">
-                <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
-                    <h3 className="text-xl font-bold text-white">⌨️ Keyboard Shortcuts</h3>
-                    <button onClick={() => setShowHelp(false)} className="text-slate-400 hover:text-white text-xl font-bold">&times;</button>
-                </div>
-                <div className="space-y-2 text-sm text-slate-300">
-                    <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Enter</span> <span>Search / Project Verse</span></div>
-                    <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Alt + P</span> <span>Project Detected Voice Verse</span></div>
-                    <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Right Arrow</span> <span>Next Slide/Verse</span></div>
-                    <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Left Arrow</span> <span>Previous Slide/Verse</span></div>
-                    <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Shift + ?</span> <span>Show This Help</span></div>
-                </div>
-                <div className="mt-4 text-center"><button onClick={() => setShowHelp(false)} className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded font-bold">Got it!</button></div>
-            </div>
-        </div>
-      )}
-
-      {/* --- COLUMN 1: INPUTS (3/12) --- */}
-      <div className="col-span-3 bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-full">
-        {/* Source Header */}
-        <div className="bg-slate-800 p-3 border-b border-slate-700 flex flex-col gap-2 shrink-0">
-            <div className="flex justify-between items-center">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Bible Versions</span>
-                <div className="flex items-center gap-2">
-                    <div className={`h-2 w-2 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-                    <span className="text-[10px] text-slate-400 font-bold">{isListening ? 'ON AIR' : 'OFF'}</span>
-                </div>
-            </div>
-            <div className="flex items-center gap-1">
-              <select value={version} onChange={(e) => setVersion(e.target.value)} className="flex-1 bg-slate-950 text-white text-xs font-bold py-1 px-2 rounded border border-slate-600 focus:outline-none focus:border-purple-500">
-                <option value="KJV">KJV</option><option value="NIV">NIV</option><option value="NKJV">NKJV</option><option value="AMP">AMP</option><option value="ESV">ESV</option><option value="NLT">NLT</option><option value="GW">GW</option>
-              </select>
-              <span className="text-[10px] text-slate-500">+</span>
-              <select value={secondaryVersion} onChange={(e) => setSecondaryVersion(e.target.value)} className="flex-1 bg-slate-950 text-blue-200 text-xs font-bold py-1 px-2 rounded border border-blue-900 focus:outline-none focus:border-blue-500">
-                <option value="NONE">None</option><option value="KJV">KJV</option><option value="NIV">NIV</option><option value="NKJV">NKJV</option><option value="AMP">AMP</option><option value="ESV">ESV</option><option value="NLT">NLT</option><option value="GW">GW</option>
-              </select>
-            </div>
-        </div>
-
-        {/* Live Audio Box */}
-        <div className="flex-1 bg-slate-950 p-4 overflow-y-auto font-mono text-xs leading-relaxed text-slate-400">
-            {error && <div className="text-red-400 mb-2 font-bold">{error}</div>}
-            <span>{transcript}</span> <span className="text-emerald-400 italic"> {interimTranscript}</span> <div ref={bottomRef} />
-        </div>
-
-        {/* Input Controls */}
-        <div className="p-3 bg-slate-800 border-t border-slate-700 flex flex-col gap-2 shrink-0">
-            <div className="flex gap-2">
-                <button onClick={isListening ? stopListening : startListening} className={`flex-1 px-3 py-2 rounded font-bold text-xs text-white transition-colors ${isListening ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>{isListening ? 'STOP MIC' : 'START MIC'}</button>
-                <button onClick={resetTranscript} className="px-3 py-2 bg-slate-700 text-slate-300 text-xs rounded hover:bg-slate-600 font-bold">CLEAR</button>
-            </div>
-
-            <div className="relative">
-                <form onSubmit={handleManualSearch} className="flex gap-1">
-                    <input type="text" value={manualInput} onChange={handleInputChange} placeholder="Type ref (e.g. jn 3 16)..." className="flex-1 bg-slate-950 text-white border border-slate-600 rounded px-2 py-2 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-600" autoComplete="off" />
-                    <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded font-bold text-sm">GO</button>
-                </form>
-                {showSuggestions && suggestions.length > 0 && (
-                    <ul className="absolute bottom-full left-0 w-full bg-slate-800 border border-slate-600 rounded-lg shadow-xl mb-1 max-h-40 overflow-y-auto z-50">
-                        {suggestions.map((suggestion, index) => ( <li key={suggestion} onClick={() => selectSuggestion(suggestion)} className={`px-3 py-2 text-xs cursor-pointer ${index === activeSuggestionIndex ? 'bg-purple-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>{suggestion}</li> ))}
-                    </ul>
-                )}
-            </div>
-            {searchError && <div className="text-red-400 text-[10px] text-center">{searchError}</div>}
-
-            {previewScripture && (
-                <div className="mt-1 bg-slate-700/50 border border-blue-500/50 rounded p-2 animate-in fade-in slide-in-from-bottom-2">
-                    <div className="flex justify-between items-center mb-1">
-                        <span className="text-blue-300 font-bold text-xs">{previewScripture.reference}</span>
-                        <button onClick={() => setPreviewScripture(null)} className="text-[10px] text-slate-400 hover:text-white">✕</button>
-                    </div>
-                    <textarea value={previewScripture.text} onChange={handlePreviewEdit} className="w-full bg-slate-800 text-slate-200 text-xs p-1 rounded border border-slate-600 focus:border-blue-500 mb-1 font-serif h-16 resize-none" />
-                    <button onClick={confirmProjection} className="w-full bg-blue-600 hover:bg-blue-500 text-white py-1.5 rounded font-bold text-xs shadow">PROJECT NOW</button>
-                </div>
-            )}
-
-            {favorites.length > 0 && (
-                <div className="pt-2 border-t border-slate-700">
-                    <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none">
-                        {favorites.map((fav, idx) => (
-                            <button key={idx} onClick={() => { handleProject(fav); setActiveScripture(fav); addToHistory(fav); }} className="bg-purple-900/40 hover:bg-purple-800 border border-purple-500/30 text-purple-200 text-[10px] px-2 py-1 rounded min-w-[60px] whitespace-nowrap">
-                                <span className="font-bold block">{fav.reference}</span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-        </div>
+  // LEFT COLUMN: INPUTS
+  const leftColumn = (
+    <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-full">
+      <div className="bg-slate-800 p-3 border-b border-slate-700 flex flex-col gap-2 shrink-0">
+          <div className="flex justify-between items-center">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Bible Versions</span>
+              <div className="flex items-center gap-2">
+                  <div className={`h-2 w-2 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                  <span className="text-[10px] text-slate-400 font-bold">{isListening ? 'ON AIR' : 'OFF'}</span>
+              </div>
+          </div>
+          <div className="flex items-center gap-1">
+            <select value={version} onChange={(e) => setVersion(e.target.value)} className="flex-1 bg-slate-950 text-white text-xs font-bold py-1 px-2 rounded border border-slate-600 focus:outline-none focus:border-purple-500">
+              <option value="KJV">KJV</option><option value="NIV">NIV</option><option value="NKJV">NKJV</option><option value="AMP">AMP</option><option value="ESV">ESV</option><option value="NLT">NLT</option><option value="GW">GW</option>
+            </select>
+            <span className="text-[10px] text-slate-500">+</span>
+            <select value={secondaryVersion} onChange={(e) => setSecondaryVersion(e.target.value)} className="flex-1 bg-slate-950 text-blue-200 text-xs font-bold py-1 px-2 rounded border border-blue-900 focus:outline-none focus:border-blue-500">
+              <option value="NONE">None</option><option value="KJV">KJV</option><option value="NIV">NIV</option><option value="NKJV">NKJV</option><option value="AMP">AMP</option><option value="ESV">ESV</option><option value="NLT">NLT</option><option value="GW">GW</option>
+            </select>
+          </div>
       </div>
 
-      {/* --- COLUMN 2: MIDDLE (5/12) --- */}
-      <div className="col-span-5 bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-full">
+      <div className="flex-1 bg-slate-950 p-4 overflow-y-auto font-mono text-xs leading-relaxed text-slate-400">
+          {error && <div className="text-red-400 mb-2 font-bold">{error}</div>}
+          <span>{transcript}</span> <span className="text-emerald-400 italic"> {interimTranscript}</span> <div ref={bottomRef} />
+      </div>
+
+      {/* Increased Height for Search Area as requested */}
+      <div className="p-4 bg-slate-800 border-t border-slate-700 flex flex-col gap-3 shrink-0 h-64">
+          <div className="flex gap-2">
+              <button onClick={isListening ? stopListening : startListening} className={`flex-1 px-3 py-2 rounded font-bold text-xs text-white transition-colors ${isListening ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>{isListening ? 'STOP MIC' : 'START MIC'}</button>
+              <button onClick={resetTranscript} className="px-3 py-2 bg-slate-700 text-slate-300 text-xs rounded hover:bg-slate-600 font-bold">CLEAR</button>
+          </div>
+
+          <div className="relative">
+              <form onSubmit={handleManualSearch} className="flex gap-1">
+                  <input type="text" value={manualInput} onChange={handleInputChange} placeholder="Type ref (e.g. jn 3 16)..." className="flex-1 bg-slate-950 text-white border border-slate-600 rounded px-2 py-3 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-600" autoComplete="off" />
+                  <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm">GO</button>
+              </form>
+              {showSuggestions && suggestions.length > 0 && (
+                  <ul className="absolute bottom-full left-0 w-full bg-slate-800 border border-slate-600 rounded-lg shadow-xl mb-1 max-h-40 overflow-y-auto z-50">
+                      {suggestions.map((suggestion, index) => ( <li key={suggestion} onClick={() => selectSuggestion(suggestion)} className={`px-3 py-2 text-xs cursor-pointer ${index === activeSuggestionIndex ? 'bg-purple-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>{suggestion}</li> ))}
+                  </ul>
+              )}
+          </div>
+          {searchError && <div className="text-red-400 text-[10px] text-center">{searchError}</div>}
+
+          {previewScripture && (
+              <div className="flex-1 bg-slate-700/50 border border-blue-500/50 rounded p-2 animate-in fade-in slide-in-from-bottom-2 flex flex-col">
+                  <div className="flex justify-between items-center mb-1">
+                      <span className="text-blue-300 font-bold text-xs">{previewScripture.reference}</span>
+                      <button onClick={() => setPreviewScripture(null)} className="text-[10px] text-slate-400 hover:text-white">✕</button>
+                  </div>
+                  <textarea value={previewScripture.text} onChange={handlePreviewEdit} className="w-full bg-slate-800 text-slate-200 text-xs p-1 rounded border border-slate-600 focus:border-blue-500 mb-2 font-serif flex-1 resize-none" />
+                  <div className="flex gap-2">
+                      <button onClick={() => handleAddToAgenda(previewScripture)} className="px-3 bg-slate-600 hover:bg-slate-500 text-white py-1.5 rounded font-bold text-xs">+ Agenda</button>
+                      <button onClick={confirmProjection} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-1.5 rounded font-bold text-xs shadow">PROJECT NOW</button>
+                  </div>
+              </div>
+          )}
+
+          {favorites.length > 0 && (
+              <div className="pt-2 border-t border-slate-700 mt-auto">
+                  <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none">
+                      {favorites.map((fav, idx) => (
+                          <button key={idx} onClick={() => { handleProject(fav); setActiveScripture(fav); addToHistory(fav); }} className="bg-purple-900/40 hover:bg-purple-800 border border-purple-500/30 text-purple-200 text-[10px] px-2 py-1 rounded min-w-[60px] whitespace-nowrap">
+                              <span className="font-bold block">{fav.reference}</span>
+                          </button>
+                      ))}
+                  </div>
+              </div>
+          )}
+      </div>
+    </div>
+  );
+
+  // MIDDLE COLUMN: ACTIVE / PROCESSING
+  const middleColumn = (
+    <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-full">
         <div className="bg-slate-800 p-3 border-b border-slate-700 flex justify-between items-center shrink-0">
             <h2 className="text-sm font-bold text-purple-400 flex items-center gap-2">✨ Detected & Active</h2>
-            <div className="flex items-center gap-2">
-               <button onClick={() => setShowHelp(true)} className="text-slate-500 hover:text-white text-xs bg-slate-800 px-2 py-1 rounded border border-slate-700">Shortcuts ?</button>
-            </div>
+            <button onClick={() => setShowHelp(true)} className="text-slate-500 hover:text-white text-xs bg-slate-800 px-2 py-1 rounded border border-slate-700">Shortcuts ?</button>
         </div>
 
         <div className="flex-1 bg-slate-900 p-4 overflow-y-auto space-y-4">
@@ -286,69 +276,91 @@ const AudioMonitor = () => {
                         {history.slice(1).map((item, idx) => (
                             <div key={idx} className="p-2 bg-slate-800/30 border border-slate-800 rounded flex justify-between items-center group hover:bg-slate-800 transition-colors">
                                 <div className="overflow-hidden mr-2"><span className="text-slate-300 font-bold text-xs block">{item.reference}</span><span className="text-slate-500 text-[10px] truncate block">{item.text}</span></div>
-                                <button onClick={() => { handleProject(item); setActiveScripture(item); }} className="opacity-0 group-hover:opacity-100 bg-slate-700 hover:bg-purple-600 text-white text-[10px] px-2 py-1 rounded transition-all">Load</button>
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => addToScriptureAgenda(item)} className="bg-slate-700 hover:bg-slate-600 text-white text-[10px] px-2 py-1 rounded" title="Add to Agenda">+</button>
+                                    <button onClick={() => { handleProject(item); setActiveScripture(item); }} className="bg-purple-700 hover:bg-purple-600 text-white text-[10px] px-2 py-1 rounded">Show</button>
+                                </div>
                             </div>
                         ))}
                     </div>
                 </div>
             )}
         </div>
-      </div>
+    </div>
+  );
 
-      {/* --- COLUMN 3: RIGHT PREVIEW (4/12) --- */}
-      <div className="col-span-4 bg-black border border-slate-800 rounded-xl overflow-hidden shadow-2xl flex flex-col h-full relative">
-         <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow z-10 animate-pulse">
-            ● LIVE OUTPUT
-         </div>
-
-         {/* Live Preview Box - Simulating the Projector */}
-         <div className="flex-1 flex items-center justify-center p-6"
-              style={{ backgroundColor: theme.backgroundColor }}>
-
-             {liveScripture ? (
-                 <div className="w-full text-center animate-in zoom-in-95 duration-300">
-                     {/* Preview Header */}
-                     <div className="inline-block px-4 py-1 rounded-t-lg mb-0 font-bold text-lg shadow-lg border-t border-l border-r"
-                          style={{
-                              backgroundColor: theme.headerBackgroundColor || '#581c87',
-                              color: theme.headerTextColor || '#ffffff',
-                              borderColor: theme.headerBackgroundColor
-                          }}>
-                        {liveScripture.reference}
-                     </div>
-
-                     {/* Preview Body */}
-                     <div className="p-6 rounded-xl shadow-2xl border border-white/10"
-                          style={{
-                              backgroundColor: theme.backgroundColor || '#0f172a',
-                              borderColor: '#334155'
-                          }}>
-                        <p className="font-serif text-xl leading-relaxed"
-                           style={{
-                               color: theme.textColor || '#ffffff',
-                               fontFamily: fontFamily,
-                               textTransform: textTransform
-                           }}>
-                           {liveScripture.text}
-                        </p>
-                        {/* Secondary Text Preview */}
-                        {liveScripture.secondaryText && (
-                            <div className="mt-4 pt-4 border-t border-white/10 opacity-80">
-                                <p className="font-serif text-lg leading-relaxed" style={{ color: theme.textColor || '#ffffff', fontFamily: fontFamily }}>
-                                    {liveScripture.secondaryText}
-                                </p>
+  // RIGHT COLUMN: AGENDA & LIVE PREVIEW (Split Vertically)
+  const rightColumn = (
+    <div className="flex flex-col h-full gap-4">
+        {/* TOP: AGENDA (50%) */}
+        <div className="flex-1 bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col">
+            <div className="bg-slate-800 p-3 border-b border-slate-700 flex justify-between items-center">
+                <h2 className="text-sm font-bold text-green-400 flex items-center gap-2">📅 Agenda</h2>
+                {scriptureAgenda.length > 0 && <button onClick={clearScriptureAgenda} className="text-[10px] text-red-400 hover:text-red-300">Clear</button>}
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                {scriptureAgenda.length === 0 ? (
+                    <div className="text-center text-slate-600 mt-10 text-xs italic">Agenda empty.</div>
+                ) : (
+                    scriptureAgenda.map((item, idx) => (
+                        <div key={idx} className="flex items-center gap-2 p-2 bg-slate-800/30 border border-slate-700 rounded group hover:bg-slate-800 transition-colors cursor-pointer" onClick={() => { handleProject(item); setActiveScripture(item); }}>
+                            <span className="text-xs font-mono text-slate-500 font-bold w-4">{idx + 1}</span>
+                            <div className="flex-1 min-w-0">
+                                <h4 className="text-sm font-bold text-slate-200 truncate">{item.reference}</h4>
+                                <span className="text-[10px] text-slate-500 truncate">{item.version}</span>
                             </div>
-                        )}
-                     </div>
-                 </div>
-             ) : (
-                 <div className="text-white/20 font-mono text-xs text-center">
-                    [ WAITING FOR SIGNAL ]
-                 </div>
-             )}
-         </div>
-      </div>
+                            <button onClick={(e) => { e.stopPropagation(); removeFromScriptureAgenda(item.agendaId); }} className="text-slate-500 hover:text-red-400 px-2">×</button>
+                        </div>
+                    ))
+                )}
+            </div>
+        </div>
 
+        {/* BOTTOM: LIVE PREVIEW (50%) */}
+        <div className="flex-1 bg-black border border-slate-800 rounded-xl overflow-hidden shadow-2xl flex flex-col relative">
+            <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow z-10 animate-pulse">● LIVE OUTPUT</div>
+            <div className="flex-1 flex items-center justify-center p-6 bg-black">
+                {liveScripture ? (
+                    <div className="w-full text-center">
+                        <div className="inline-block px-3 py-1 rounded-t-lg mb-0 font-bold text-sm shadow-lg border-t border-l border-r" style={{ backgroundColor: theme.headerBackgroundColor || '#581c87', color: theme.headerTextColor || '#ffffff', borderColor: theme.headerBackgroundColor }}>{liveScripture.reference}</div>
+                        <div className="p-4 rounded-xl shadow-2xl border border-white/10" style={{ backgroundColor: theme.backgroundColor || '#0f172a', borderColor: '#334155' }}>
+                            <p className="font-serif text-sm leading-relaxed" style={{ color: theme.textColor || '#ffffff', fontFamily: fontFamily, textTransform: textTransform }}>{liveScripture.text}</p>
+                            {liveScripture.secondaryText && <div className="mt-2 pt-2 border-t border-white/10 opacity-80"><p className="font-serif text-sm leading-relaxed" style={{ color: theme.textColor || '#ffffff', fontFamily: fontFamily }}>{liveScripture.secondaryText}</p></div>}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="text-white/20 font-mono text-xs text-center">[ WAITING ]</div>
+                )}
+            </div>
+        </div>
+    </div>
+  );
+
+  return (
+    <div className="w-full h-[calc(100vh-6rem)]">
+        {/* HELP MODAL */}
+        {showHelp && (
+            <div className="absolute inset-0 bg-slate-900/90 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
+                <div className="bg-slate-800 border border-slate-600 rounded-xl p-6 max-w-lg w-full shadow-2xl">
+                    <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
+                        <h3 className="text-xl font-bold text-white">⌨️ Keyboard Shortcuts</h3>
+                        <button onClick={() => setShowHelp(false)} className="text-slate-400 hover:text-white text-xl font-bold">&times;</button>
+                    </div>
+                    <div className="space-y-2 text-sm text-slate-300">
+                        <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Enter</span> <span>Search / Project Verse</span></div>
+                        <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Alt + P</span> <span>Project Detected Voice Verse</span></div>
+                        <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Right/Left Arrow</span> <span>Next/Prev Slide</span></div>
+                    </div>
+                    <div className="mt-4 text-center"><button onClick={() => setShowHelp(false)} className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded font-bold">Got it!</button></div>
+                </div>
+            </div>
+        )}
+
+        <ResizableGrid
+            left={leftColumn}
+            middle={middleColumn}
+            right={rightColumn}
+        />
     </div>
   );
 };

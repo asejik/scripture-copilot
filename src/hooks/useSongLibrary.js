@@ -1,83 +1,51 @@
 import { useState, useEffect } from 'react';
 
 const useSongLibrary = () => {
-  // Load Songs from LocalStorage
+  // --- SONGS ---
   const [songs, setSongs] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('copilot_songs')) || [];
-    } catch (e) {
-      return [];
-    }
+    try { return JSON.parse(localStorage.getItem('copilot_songs')) || []; } catch (e) { return []; }
   });
 
-  // Load Agenda from LocalStorage
   const [agenda, setAgenda] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('copilot_agenda')) || [];
-    } catch (e) {
-      return [];
-    }
+    try { return JSON.parse(localStorage.getItem('copilot_agenda')) || []; } catch (e) { return []; }
   });
 
-  // Auto-save whenever they change
-  useEffect(() => {
-    localStorage.setItem('copilot_songs', JSON.stringify(songs));
-  }, [songs]);
+  // --- SCRIPTURES (NEW) ---
+  const [scriptureAgenda, setScriptureAgenda] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('copilot_scripture_agenda')) || []; } catch (e) { return []; }
+  });
 
-  useEffect(() => {
-    localStorage.setItem('copilot_agenda', JSON.stringify(agenda));
-  }, [agenda]);
+  // --- PERSISTENCE ---
+  useEffect(() => { localStorage.setItem('copilot_songs', JSON.stringify(songs)); }, [songs]);
+  useEffect(() => { localStorage.setItem('copilot_agenda', JSON.stringify(agenda)); }, [agenda]);
+  useEffect(() => { localStorage.setItem('copilot_scripture_agenda', JSON.stringify(scriptureAgenda)); }, [scriptureAgenda]);
 
-  // --- ACTIONS ---
+  // --- SONG ACTIONS ---
+  const addSong = (song) => { setSongs(prev => [{ ...song, id: Date.now().toString() }, ...prev]); };
+  const updateSong = (updated) => { setSongs(prev => prev.map(s => s.id === updated.id ? updated : s)); };
+  const deleteSong = (id) => { if(confirm('Delete song?')) { setSongs(prev => prev.filter(s => s.id !== id)); setAgenda(prev => prev.filter(i => i.songId !== id)); } };
 
-  const addSong = (song) => {
-    const newSong = { ...song, id: Date.now().toString() };
-    setSongs(prev => [newSong, ...prev]);
+  const addToAgenda = (song) => { setAgenda(prev => [...prev, { ...song, agendaId: Date.now().toString(), songId: song.id }]); };
+  const removeFromAgenda = (id) => { setAgenda(prev => prev.filter(i => i.agendaId !== id)); };
+  const clearAgenda = () => { if(confirm('Clear song agenda?')) setAgenda([]); };
+
+  // --- SCRIPTURE ACTIONS (NEW) ---
+  const addToScriptureAgenda = (scripture) => {
+    // Avoid duplicates if needed, but allowing for now
+    setScriptureAgenda(prev => [...prev, { ...scripture, agendaId: Date.now().toString() }]);
   };
 
-  const updateSong = (updatedSong) => {
-    setSongs(prev => prev.map(s => s.id === updatedSong.id ? updatedSong : s));
+  const removeFromScriptureAgenda = (id) => {
+    setScriptureAgenda(prev => prev.filter(i => i.agendaId !== id));
   };
 
-  const deleteSong = (id) => {
-    if (confirm('Are you sure you want to delete this song?')) {
-      setSongs(prev => prev.filter(s => s.id !== id));
-      // Also remove from agenda if it exists there
-      setAgenda(prev => prev.filter(item => item.songId !== id));
-    }
-  };
-
-  const addToAgenda = (song) => {
-    // Prevent duplicates in agenda? (Optional, currently allowing duplicates)
-    setAgenda(prev => [...prev, { ...song, agendaId: Date.now().toString(), songId: song.id }]);
-  };
-
-  const removeFromAgenda = (agendaId) => {
-    setAgenda(prev => prev.filter(item => item.agendaId !== agendaId));
-  };
-
-  const clearAgenda = () => {
-      if(confirm('Clear the entire agenda?')) setAgenda([]);
-  }
-
-  // Drag and Drop reordering (Simple version)
-  const moveAgendaItem = (fromIndex, toIndex) => {
-    const updated = [...agenda];
-    const [movedItem] = updated.splice(fromIndex, 1);
-    updated.splice(toIndex, 0, movedItem);
-    setAgenda(updated);
+  const clearScriptureAgenda = () => {
+    if(confirm('Clear scripture agenda?')) setScriptureAgenda([]);
   };
 
   return {
-    songs,
-    agenda,
-    addSong,
-    updateSong,
-    deleteSong,
-    addToAgenda,
-    removeFromAgenda,
-    clearAgenda,
-    moveAgendaItem
+    songs, agenda, addSong, updateSong, deleteSong, addToAgenda, removeFromAgenda, clearAgenda,
+    scriptureAgenda, addToScriptureAgenda, removeFromScriptureAgenda, clearScriptureAgenda
   };
 };
 

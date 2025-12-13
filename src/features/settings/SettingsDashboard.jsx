@@ -17,12 +17,14 @@ const SYSTEM_FONTS = [
 
 const SettingsDashboard = () => {
   const {
-    fontSize, headerFontSize, updateStyle, textTransform, fontFamily, // NEW: headerFontSize
+    fontSize, headerFontSize, updateStyle, textTransform, fontFamily,
     layoutMode, updateLayoutMode,
     textAlign, updateTextAlign,
     aspectRatio, updateAspectRatio,
     theme, updateTheme, resetSettings,
-    headerPosition, updateHeaderPosition
+    headerPosition, updateHeaderPosition,
+    backgroundTransparent, toggleBackgroundTransparent, // NEW
+    headerBackgroundEnabled, toggleHeaderBackground // NEW
   } = useProjection();
 
   const renderPosBtn = (pos, label) => (
@@ -39,7 +41,7 @@ const SettingsDashboard = () => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto h-full overflow-y-auto pb-20 custom-scrollbar">
 
-      {/* ... (Left Column remains same) ... */}
+      {/* --- COLUMN 1: LAYOUT & COLORS --- */}
       <div className="space-y-6">
         <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 shadow-xl">
           <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">📺 Display Layout</h2>
@@ -77,17 +79,38 @@ const SettingsDashboard = () => {
           </div>
         </div>
 
-        {/* ... (Theme Colors Section remains same) ... */}
         <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 shadow-xl">
           <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">🎨 Custom Colors</h2>
           <div className="space-y-6">
+
+            {/* TITLE / HEADER BOX COLOR SETTINGS */}
             <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase mb-2 border-b border-slate-700 pb-1">Title / Header Box</label>
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <span className="text-[10px] text-slate-500 mb-1 block">Background</span>
-                        <div className="flex items-center gap-2 bg-slate-950 p-2 rounded border border-slate-700">
-                            <input type="color" value={theme.headerBackgroundColor || '#581c87'} onChange={(e) => updateTheme({ headerBackgroundColor: e.target.value })} className="w-8 h-8 rounded cursor-pointer border-none bg-transparent" />
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="text-[10px] text-slate-500">Background</span>
+                            {/* SHOW BOX TOGGLE */}
+                            <label className="flex items-center gap-1 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={headerBackgroundEnabled}
+                                    onChange={(e) => toggleHeaderBackground(e.target.checked)}
+                                    className="w-3 h-3 accent-purple-500 rounded cursor-pointer"
+                                />
+                                <span className={`text-[9px] font-bold ${headerBackgroundEnabled ? 'text-green-400' : 'text-slate-600'}`}>
+                                    {headerBackgroundEnabled ? 'ON' : 'OFF'}
+                                </span>
+                            </label>
+                        </div>
+                        <div className={`flex items-center gap-2 bg-slate-950 p-2 rounded border ${headerBackgroundEnabled ? 'border-slate-700' : 'border-slate-800 opacity-50'}`}>
+                            <input
+                                type="color"
+                                value={theme.headerBackgroundColor || '#581c87'}
+                                onChange={(e) => updateTheme({ headerBackgroundColor: e.target.value })}
+                                disabled={!headerBackgroundEnabled}
+                                className="w-8 h-8 rounded cursor-pointer border-none bg-transparent"
+                            />
                             <span className="text-xs font-mono">{theme.headerBackgroundColor}</span>
                         </div>
                     </div>
@@ -100,14 +123,36 @@ const SettingsDashboard = () => {
                     </div>
                 </div>
             </div>
+
+            {/* BODY / SCRIPTURE COLOR SETTINGS */}
             <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase mb-2 border-b border-slate-700 pb-1">Lyrics / Scripture Body</label>
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <span className="text-[10px] text-slate-500 mb-1 block">Background</span>
-                        <div className="flex items-center gap-2 bg-slate-950 p-2 rounded border border-slate-700">
-                            <input type="color" value={theme.backgroundColor || '#0f172a'} onChange={(e) => updateTheme({ backgroundColor: e.target.value })} className="w-8 h-8 rounded cursor-pointer border-none bg-transparent" />
-                            <span className="text-xs font-mono">{theme.backgroundColor}</span>
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="text-[10px] text-slate-500">Background</span>
+                            {/* TRANSPARENT TOGGLE */}
+                            <label className="flex items-center gap-1 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={backgroundTransparent}
+                                    onChange={(e) => toggleBackgroundTransparent(e.target.checked)}
+                                    className="w-3 h-3 accent-purple-500 rounded cursor-pointer"
+                                />
+                                <span className={`text-[9px] font-bold ${backgroundTransparent ? 'text-green-400' : 'text-slate-600'}`}>
+                                    Transparent
+                                </span>
+                            </label>
+                        </div>
+                        <div className={`flex items-center gap-2 bg-slate-950 p-2 rounded border ${backgroundTransparent ? 'border-slate-800 opacity-50' : 'border-slate-700'}`}>
+                            <input
+                                type="color"
+                                value={theme.backgroundColor || '#0f172a'}
+                                onChange={(e) => updateTheme({ backgroundColor: e.target.value })}
+                                disabled={backgroundTransparent}
+                                className="w-8 h-8 rounded cursor-pointer border-none bg-transparent"
+                            />
+                            <span className="text-xs font-mono">{backgroundTransparent ? 'None' : theme.backgroundColor}</span>
                         </div>
                     </div>
                     <div>
@@ -119,6 +164,7 @@ const SettingsDashboard = () => {
                     </div>
                 </div>
             </div>
+
             <div className="pt-4 border-t border-slate-800">
                 <button onClick={() => { if(confirm('Reset ALL settings to factory defaults?')) resetSettings(); }} className="w-full bg-red-900/20 hover:bg-red-900/50 text-red-400 border border-red-900/50 py-3 rounded font-bold transition-colors">⟳ Factory Reset All</button>
             </div>

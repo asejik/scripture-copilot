@@ -8,7 +8,7 @@ import useSongLibrary from '../../hooks/useSongLibrary';
 import ResizableGrid from '../../components/ResizableGrid';
 import ResizableVerticalStack from '../../components/ResizableVerticalStack';
 import SlideRenderer from '../../components/SlideRenderer';
-import ScaledPreview from '../../components/ScaledPreview'; // Make sure you created this file!
+import ScaledPreview from '../../components/ScaledPreview';
 
 import kjvData from '../../data/kjv.json';
 import nivData from '../../data/niv.json';
@@ -69,7 +69,10 @@ const AudioMonitor = () => {
       }
   }, [voiceDetected]);
 
-  const { projectScripture, projectSong, liveScripture, nextSlide, prevSlide, currentSlideIndex, slides, jumpToSlide, theme, fontFamily, textTransform, fontSize, layoutMode, textAlign, aspectRatio } = useProjection();
+  const {
+      projectScripture, projectSong, liveScripture, nextSlide, prevSlide, currentSlideIndex, slides, jumpToSlide,
+      theme, fontFamily, textTransform, fontSize, layoutMode, textAlign, aspectRatio
+  } = useProjection();
 
   const bottomRef = useRef(null);
   useEffect(() => { if (bottomRef.current) bottomRef.current.scrollIntoView({ behavior: 'smooth' }); }, [transcript, interimTranscript]);
@@ -250,6 +253,7 @@ const AudioMonitor = () => {
     </div>
   );
 
+  // ... (Rest of AudioMonitor remains unchanged) ...
   const middleColumn = (
     <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-full">
         <div className="bg-slate-800 p-3 border-b border-slate-700 flex justify-between items-center shrink-0">
@@ -368,7 +372,7 @@ const AudioMonitor = () => {
                         aspectRatio={aspectRatio}
                         fontFamily={fontFamily}
                         textTransform={textTransform}
-                        isPreview={false} // Use false to render full-scale inside the scaler
+                        isPreview={false}
                     />
                 </ScaledPreview>
             ) : (

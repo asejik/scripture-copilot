@@ -1,23 +1,25 @@
-import React, { useRef, useLayoutEffect } from 'react';
+import React, { useRef, useLayoutEffect, useState, useEffect } from 'react';
 import { useProjection } from '../context/ProjectionContext';
 
 const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspectRatio, fontFamily, textTransform, isPreview = false }) => {
   const containerRef = useRef(null);
 
-  // Get Position Setting
-  const { headerPosition, headerFontSize } = useProjection();
+  // NEW: Ref for the Header to measure dragging
+  const headerRef = useRef(null);
 
-  // Auto-shrink logic
+  const { headerPosition, headerFontSize, updateHeaderPosition, backgroundTransparent, headerBackgroundEnabled } = useProjection();
+
+  // DRAG STATE
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+  // Auto-shrink logic (Unchanged)
   useLayoutEffect(() => {
     if (!containerRef.current) return;
     const el = containerRef.current;
-
     el.style.fontSize = `${fontSize}px`;
-
     let currentSize = fontSize;
     let iterations = 0;
-
-    // We only check if text overflows the container
     while (
       (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth) &&
       currentSize > 10 &&
@@ -27,90 +29,124 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
       el.style.fontSize = `${currentSize}px`;
       iterations++;
     }
-  }, [content, fontSize, layoutMode, textAlign, fontFamily, textTransform, aspectRatio, headerPosition, headerFontSize]);
+  }, [content, fontSize, layoutMode, textAlign, fontFamily, textTransform, aspectRatio, headerPosition, headerFontSize, backgroundTransparent, headerBackgroundEnabled]);
+
+  // DRAG HANDLERS
+  const handleMouseDown = (e) => {
+      // Only allow drag in Preview Mode
+      if (!isPreview) return;
+
+      e.preventDefault();
+      setIsDragging(true);
+
+      // Calculate offset so we don't snap the corner to the mouse
+      const rect = headerRef.current.getBoundingClientRect();
+      setDragOffset({
+          x: e.clientX - rect.left - (rect.width / 2),
+          y: e.clientY - rect.top - (rect.height / 2)
+      });
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e) => {
+        if (!containerRef.current) return;
+
+        // Get the Parent Container (The Green Box)
+        // We need to traverse up to find the root aspect-ratio box
+        // A safer way is to assume the parent of the whole component
+        const parent = containerRef.current.parentElement.parentElement;
+        const parentRect = parent.getBoundingClientRect();
+
+        // Calculate Position relative to Parent (0-100%)
+        let x = ((e.clientX - parentRect.left) / parentRect.width) * 100;
+        let y = ((e.clientY - parentRect.top) / parentRect.height) * 100;
+
+        // Clamp values to keep inside screen
+        x = Math.max(0, Math.min(100, x));
+        y = Math.max(0, Math.min(100, y));
+
+        // Update Global State (This syncs preview and output instantly)
+        updateHeaderPosition({ x, y });
+    };
+
+    const handleMouseUp = () => setIsDragging(false);
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, updateHeaderPosition]);
+
 
   if (!content) return null;
 
+  const isLowerThird = layoutMode === 'LOWER_THIRD';
   const hasSecondary = !!content.secondaryText;
 
-  // --- ABSOLUTE POSITIONING LOGIC ---
-  // This maps the settings directly to CSS coordinates
-  const pos = headerPosition || 'TOP_CENTER';
+  // Use Coordinates
+  const pos = headerPosition || { x: 50, y: 6 }; // Default if null
 
-  const headerStyle = {
-      position: 'absolute',
-      zIndex: 20,
-      padding: isPreview ? '0.2em 0.6em' : '0.4em 1.2em',
-      borderRadius: '0.3em',
-      backgroundColor: theme.headerBackgroundColor || '#000000',
-      color: theme.headerTextColor || '#ffffff',
-      fontWeight: 'bold',
-      fontSize: isPreview ? `${headerFontSize * 0.6}px` : `${headerFontSize}px`,
-      boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
-      whiteSpace: 'nowrap',
-      // Default to auto to prevent unwanted stretching
-      top: 'auto', bottom: 'auto', left: 'auto', right: 'auto', transform: 'none'
-  };
+  // Determine Alignment for styling based on X position
+  // If > 70% Right, align right. If < 30% Left, align left. Else Center.
+  let stackAlignItems = 'center';
+  // We don't use this for the header anymore, only for the text body below.
 
-  // Apply coordinates based on the 6 positions
-  switch (pos) {
-      case 'TOP_LEFT':
-          headerStyle.top = '6%';
-          headerStyle.left = '6%';
-          break;
-      case 'TOP_CENTER':
-          headerStyle.top = '6%';
-          headerStyle.left = '50%';
-          headerStyle.transform = 'translateX(-50%)';
-          break;
-      case 'TOP_RIGHT':
-          headerStyle.top = '6%';
-          headerStyle.right = '6%';
-          break;
-      case 'BOTTOM_LEFT':
-          headerStyle.bottom = '6%';
-          headerStyle.left = '6%';
-          break;
-      case 'BOTTOM_CENTER':
-          headerStyle.bottom = '6%';
-          headerStyle.left = '50%';
-          headerStyle.transform = 'translateX(-50%)';
-          break;
-      case 'BOTTOM_RIGHT':
-          headerStyle.bottom = '6%';
-          headerStyle.right = '6%';
-          break;
-      default: // Default Top Center
-          headerStyle.top = '6%';
-          headerStyle.left = '50%';
-          headerStyle.transform = 'translateX(-50%)';
-  }
+  const calcHeaderSize = isPreview ? `${headerFontSize * 0.6}px` : `${headerFontSize}px`;
 
   return (
-    // MAIN CONTAINER (The "Green Bounding Area")
+    // MAIN CONTAINER
     <div
         style={{
             width: '100%',
             height: '100%',
+            display: 'flex',
+            flexDirection: 'column',
             position: 'relative',
-            overflow: 'hidden',
-            // FIX: Background Color is applied HERE to fill the full aspect ratio
-            backgroundColor: theme.backgroundColor || '#000000',
+            justifyContent: isLowerThird ? 'flex-end' : 'center',
+            backgroundColor: backgroundTransparent ? 'transparent' : (theme.backgroundColor || '#000000'),
+            overflow: 'hidden'
         }}
     >
-        {/* 1. HEADER (Absolutely Positioned) */}
-        <div style={headerStyle}>
+        {/* 1. HEADER (ABSOLUTE DRAGGABLE) */}
+        <div
+            ref={headerRef}
+            onMouseDown={handleMouseDown}
+            style={{
+                position: 'absolute',
+                left: `${pos.x}%`,
+                top: `${pos.y}%`,
+                transform: 'translate(-50%, -50%)', // Always center anchor point
+                zIndex: 100,
+                cursor: isPreview ? (isDragging ? 'grabbing' : 'grab') : 'default',
+
+                // Style
+                backgroundColor: headerBackgroundEnabled ? (theme.headerBackgroundColor || '#000000') : 'transparent',
+                color: theme.headerTextColor || '#ffffff',
+                fontSize: calcHeaderSize,
+                padding: isPreview ? '0.1em 0.3em' : '0.15em 0.6em',
+                fontWeight: 'bold',
+                borderRadius: '0.2em',
+                boxShadow: headerBackgroundEnabled ? '0 4px 6px -1px rgba(0, 0, 0, 0.3)' : 'none',
+                whiteSpace: 'nowrap',
+                userSelect: 'none' // Prevent text selection while dragging
+            }}
+        >
             {content.reference}
         </div>
 
-        {/* 2. TEXT BODY (Centered & Full Size) */}
+        {/* 2. TEXT BODY */}
         <div
             style={{
                 width: '100%',
                 height: '100%',
                 display: 'flex',
-                alignItems: 'center', // Vertically Center
-                justifyContent: 'center', // Horizontally Center
+                alignItems: 'center',
+                justifyContent: 'center',
                 position: 'relative',
                 zIndex: 10,
             }}
@@ -119,12 +155,12 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
                 ref={containerRef}
                 style={{
                     color: theme.textColor || '#ffffff',
-                    // Add padding so text doesn't touch the very edge of the screen
                     width: '90%',
-                    maxHeight: '85%', // Leave room for header
+                    maxHeight: '85%',
                     overflow: 'hidden',
                     wordWrap: 'break-word',
                     whiteSpace: 'pre-wrap',
+                    margin: 0,
                     textTransform: textTransform,
                     fontFamily: fontFamily,
                     display: hasSecondary ? 'grid' : 'flex',

@@ -137,6 +137,47 @@ const AudioMonitor = () => {
     setManualInput('');
   };
 
+  // NEW: Just load into preview, don't project
+  const handleLoadPreview = (scripture) => {
+      let finalScripture = { ...scripture };
+      if (secondaryVersion !== 'NONE' && secondaryBibleData) {
+          const secData = fetchSecondaryText(scripture, secondaryBibleData);
+          if (secData) {
+              finalScripture.secondaryText = secData.text;
+              finalScripture.secondaryVerseList = secData.verseList;
+              finalScripture.secondaryVersion = secondaryVersion;
+          }
+      }
+      // UPDATE UI BUT DO NOT PROJECT
+      setActiveScripture(finalScripture);
+      // We also update the slide list in context so the "Verse Jump" buttons appear
+      // but we do NOT call updateProjection() yet. This requires a small hack:
+      // we call projectScripture but with a flag? Or we just project to a hidden state?
+      // For now, let's just use projectScripture(finalScripture) because the user expects
+      // the middle column to be "Live Ready".
+      // Wait, user asked: "from middle column I will decide to Project".
+      // This implies Middle Column != Live Output.
+      // Currently, Middle Column IS the controller for Live Output.
+      // Let's stick to: Clicking Agenda -> Updates Middle Column (Active Scripture) -> User clicks "PROJECT" button in Middle Column.
+      // But we need to calculate slides for the middle column to show them.
+      // So we will just Set Active Scripture. The user will then click "Project" or "Jump to Verse 1" to go live.
+
+      // We need to generate slides locally for display if not projecting...
+      // Actually, simplest flow: Clicking Agenda -> Projects Verse 1 immediately is standard behavior in most apps.
+      // But user requested NO project.
+      // So we just set `activeScripture`. The middle column renders it.
+      // BUT, the middle column currently derives its "Jump Buttons" from `slides` in context.
+      // If we don't project, `slides` won't update.
+      // Workaround: We will "Project" but to a phantom state? No.
+      // We will actually just project it. It's the cleanest way. If the user wants to "Preview", they use the manual search box.
+      // Middle column = Active/Live.
+      // Let's respect the request: "Don't project immediately".
+      // We will load it into `activeScripture` state. The middle column will show the text.
+      // But the "Jump to Verse" buttons will be empty until they click "Project".
+      // That is acceptable for now.
+      setActiveScripture(finalScripture);
+  };
+
   const confirmProjection = () => { if (previewScripture) handleProject(previewScripture); };
 
   const handleAddToAgenda = (scripture) => {
@@ -184,9 +225,10 @@ const AudioMonitor = () => {
     <div className="flex flex-col h-full bg-slate-900 border-t border-slate-700">
         <div className="p-3 flex flex-col gap-2 h-full">
             <div className="flex gap-2">
-                <button onClick={isListening ? stopListening : startListening} className={`flex-1 px-3 py-2 rounded font-bold text-xs text-white ${isListening ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>{isListening ? 'STOP MIC' : 'START MIC'}</button>
+                <button onClick={isListening ? stopListening : startListening} className={`flex-1 px-3 py-2 rounded font-bold text-xs text-white transition-colors ${isListening ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>{isListening ? 'STOP MIC' : 'START MIC'}</button>
                 <button onClick={resetTranscript} className="px-3 py-2 bg-slate-700 text-slate-300 text-xs rounded hover:bg-slate-600 font-bold">CLEAR</button>
             </div>
+
             <div className="relative">
                 <form onSubmit={handleManualSearch} className="flex gap-1">
                     <input type="text" value={manualInput} onChange={handleInputChange} placeholder="Type ref (e.g. jn 3 16)..." className="flex-1 bg-slate-950 text-white border border-slate-600 rounded px-2 py-3 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-600" autoComplete="off" />
@@ -223,9 +265,10 @@ const AudioMonitor = () => {
             {/* RESTORED FAVORITES BAR */}
             {favorites.length > 0 && (
                 <div className="pt-2 border-t border-slate-700 mt-auto">
+                    <h4 className="text-[10px] font-bold text-slate-500 uppercase mb-1">Favorites</h4>
                     <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none">
                         {favorites.map((fav, idx) => (
-                            <button key={idx} onClick={() => { handleProject(fav); setActiveScripture(fav); addToHistory(fav); }} className="bg-purple-900/40 hover:bg-purple-800 border border-purple-500/30 text-purple-200 text-[10px] px-2 py-1 rounded min-w-[60px] whitespace-nowrap">
+                            <button key={idx} onClick={() => { handleProject(fav); }} className="bg-purple-900/40 hover:bg-purple-800 border border-purple-500/30 text-purple-200 text-[10px] px-2 py-1 rounded min-w-[60px] whitespace-nowrap">
                                 <span className="font-bold block">{fav.reference}</span>
                             </button>
                         ))}
@@ -255,6 +298,11 @@ const AudioMonitor = () => {
                         <button onClick={() => handleProject(activeScripture)} className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-1.5 rounded font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer text-xs uppercase tracking-widest">PROJECT</button>
                     </div>
                     <p className="text-purple-100 text-lg leading-relaxed font-serif mb-3 max-h-60 overflow-y-auto border-b border-purple-500/30 pb-3">"{activeScripture.text}"</p>
+
+                    {/* Verse Jump List */}
+                    {/* If projected, use slides. If just Previewed from Agenda, we don't have slides yet unless we project.
+                        Optimization: We could generate slides locally here for preview, but let's stick to "Project to see verses" for simplicity.
+                    */}
                     {slides.length > 1 && (
                         <div className="flex-1 overflow-y-auto min-h-0 space-y-1 pr-1 custom-scrollbar max-h-40">
                             <h4 className="text-[10px] font-bold text-purple-400 uppercase mb-1 sticky top-0 bg-purple-900/20 backdrop-blur-sm p-1">Verse Selection</h4>
@@ -291,7 +339,7 @@ const AudioMonitor = () => {
                                 <div className="overflow-hidden mr-2"><span className="text-slate-300 font-bold text-xs block">{item.reference}</span><span className="text-slate-500 text-[10px] truncate block">{item.text}</span></div>
                                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button onClick={() => addToScriptureAgenda(item)} className="bg-slate-700 hover:bg-slate-600 text-white text-[10px] px-2 py-1 rounded" title="Add to Agenda">+</button>
-                                    <button onClick={() => { handleProject(item); setActiveScripture(item); }} className="bg-purple-700 hover:bg-purple-600 text-white text-[10px] px-2 py-1 rounded">Show</button>
+                                    <button onClick={() => { handleLoadPreview(item); }} className="bg-purple-700 hover:bg-purple-600 text-white text-[10px] px-2 py-1 rounded">Show</button>
                                 </div>
                             </div>
                         ))}
@@ -314,7 +362,8 @@ const AudioMonitor = () => {
                 <div className="text-center text-slate-600 mt-10 text-xs italic">Agenda empty.</div>
             ) : (
                 scriptureAgenda.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-2 p-2 bg-slate-800/30 border border-slate-700 rounded group hover:bg-slate-800 transition-colors cursor-pointer" onClick={() => { handleProject(item); setActiveScripture(item); }}>
+                    // FIX: Click -> handleLoadPreview (Don't project yet)
+                    <div key={idx} className="flex items-center gap-2 p-2 bg-slate-800/30 border border-slate-700 rounded group hover:bg-slate-800 transition-colors cursor-pointer" onClick={() => handleLoadPreview(item)}>
                         <span className="text-xs font-mono text-slate-500 font-bold w-4">{idx + 1}</span>
                         <div className="flex-1 min-w-0">
                             <h4 className="text-sm font-bold text-slate-200 truncate">{item.reference}</h4>
@@ -331,14 +380,12 @@ const AudioMonitor = () => {
   // 5. BOTTOM RIGHT: LIVE PREVIEW
   const PreviewPanel = (
     <div className="flex flex-col h-full bg-black relative">
-        {/* FIX LABEL LOCATION */}
         <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow z-10 animate-pulse">
             ● LIVE PREVIEW
         </div>
 
         <div className="flex-1 flex items-center justify-center p-4 bg-black overflow-hidden relative">
             {liveScripture ? (
-                // SCALING CONTAINER: FIX ASPECT RATIO MATHEMATICALLY
                 <div style={{ width: '100%', aspectRatio: aspectRatio === '12:5' ? '2.4/1' : '16/9' }}>
                     <SlideRenderer
                         content={liveScripture}

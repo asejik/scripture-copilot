@@ -44,12 +44,10 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
         if (!containerRef.current) return;
 
         // Get the Parent Container (The Green Box)
-        // We traverse up to find the container that holds the background color
         const parent = containerRef.current.parentElement.parentElement;
         const parentRect = parent.getBoundingClientRect();
 
         // Calculate Position relative to Parent (0-100%)
-        // This math works even if the preview is Scaled/Zoomed out!
         let x = ((e.clientX - parentRect.left) / parentRect.width) * 100;
         let y = ((e.clientY - parentRect.top) / parentRect.height) * 100;
 
@@ -76,12 +74,11 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
 
   const isLowerThird = layoutMode === 'LOWER_THIRD';
   const hasSecondary = !!content.secondaryText;
+  const isSong = content.type === 'song'; // Check type
 
   // Use Coordinates
   const pos = headerPosition || { x: 50, y: 6 };
 
-  // FIX: Always render full size font.
-  // ScaledPreview component handles the visual shrinking for the dashboard.
   const calcHeaderSize = `${headerFontSize}px`;
 
   return (
@@ -98,34 +95,35 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
             overflow: 'hidden'
         }}
     >
-        {/* 1. HEADER (ABSOLUTE DRAGGABLE) */}
-        <div
-            ref={headerRef}
-            onMouseDown={handleMouseDown}
-            style={{
-                position: 'absolute',
-                left: `${pos.x}%`,
-                top: `${pos.y}%`,
-                transform: 'translate(-50%, -50%)',
-                zIndex: 100,
-                // Cursor changes to indicate draggable state
-                cursor: isPreview ? (isDragging ? 'grabbing' : 'grab') : 'none',
+        {/* 1. HEADER (ABSOLUTE DRAGGABLE) - HIDE IF SONG */}
+        {!isSong && (
+            <div
+                ref={headerRef}
+                onMouseDown={handleMouseDown}
+                style={{
+                    position: 'absolute',
+                    left: `${pos.x}%`,
+                    top: `${pos.y}%`,
+                    transform: 'translate(-50%, -50%)',
+                    zIndex: 100,
+                    // Cursor changes to indicate draggable state
+                    cursor: isPreview ? (isDragging ? 'grabbing' : 'grab') : 'none',
 
-                // Style
-                backgroundColor: headerBackgroundEnabled ? (theme.headerBackgroundColor || '#000000') : 'transparent',
-                color: theme.headerTextColor || '#ffffff',
-                fontSize: calcHeaderSize,
-                // FIX: Use standard padding. ScaledPreview will shrink it visually.
-                padding: '0.15em 0.6em',
-                fontWeight: 'bold',
-                borderRadius: '0.2em',
-                boxShadow: headerBackgroundEnabled ? '0 4px 6px -1px rgba(0, 0, 0, 0.3)' : 'none',
-                whiteSpace: 'nowrap',
-                userSelect: 'none'
-            }}
-        >
-            {content.reference}
-        </div>
+                    // Style
+                    backgroundColor: headerBackgroundEnabled ? (theme.headerBackgroundColor || '#000000') : 'transparent',
+                    color: theme.headerTextColor || '#ffffff',
+                    fontSize: calcHeaderSize,
+                    padding: '0.15em 0.6em',
+                    fontWeight: 'bold',
+                    borderRadius: '0.2em',
+                    boxShadow: headerBackgroundEnabled ? '0 4px 6px -1px rgba(0, 0, 0, 0.3)' : 'none',
+                    whiteSpace: 'nowrap',
+                    userSelect: 'none'
+                }}
+            >
+                {content.reference}
+            </div>
+        )}
 
         {/* 2. TEXT BODY */}
         <div

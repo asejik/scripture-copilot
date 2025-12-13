@@ -4,15 +4,22 @@ import { useProjection } from '../context/ProjectionContext';
 const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspectRatio, fontFamily, textTransform, isPreview = false }) => {
   const containerRef = useRef(null);
   const boxRef = useRef(null);
-  const { headerPosition } = useProjection();
 
-  // Auto-shrink logic
+  // Get global settings from Context
+  const { headerPosition, headerFontSize } = useProjection();
+
+  // Auto-shrink logic: Reduces font size if text overflows the container
   useLayoutEffect(() => {
     if (!containerRef.current) return;
     const el = containerRef.current;
+
+    // Set initial size
     el.style.fontSize = `${fontSize}px`;
+
     let currentSize = fontSize;
     let iterations = 0;
+
+    // Shrink loop
     while (
       (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth) &&
       currentSize > 10 &&
@@ -22,21 +29,24 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
       el.style.fontSize = `${currentSize}px`;
       iterations++;
     }
-  }, [content, fontSize, layoutMode, textAlign, fontFamily, textTransform, aspectRatio, headerPosition]);
+  }, [content, fontSize, layoutMode, textAlign, fontFamily, textTransform, aspectRatio, headerPosition, headerFontSize]);
 
   if (!content) return null;
 
   const isLowerThird = layoutMode === 'LOWER_THIRD';
   const hasSecondary = !!content.secondaryText;
 
-  // Header Position Logic
+  // --- POSITIONING LOGIC ---
   const pos = headerPosition || 'TOP_CENTER';
   const isBottom = pos.startsWith('BOTTOM');
 
-  // Align the entire stack (Header + Body) based on position
-  let stackAlignItems = 'center'; // Default center
+  // Alignment: Left, Center, or Right
+  let stackAlignItems = 'center';
   if (pos.includes('LEFT')) stackAlignItems = 'flex-start';
   if (pos.includes('RIGHT')) stackAlignItems = 'flex-end';
+
+  // Header Size Calculation (Scaled down slightly for preview)
+  const calcHeaderSize = isPreview ? `${headerFontSize * 0.6}px` : `${headerFontSize}px`;
 
   return (
     <div
@@ -46,12 +56,12 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
             display: 'flex',
             flexDirection: 'column',
             position: 'relative',
-            // If Lower Third, push everything to bottom. Else Center vertically.
+            // If Lower Third, push content to bottom. Otherwise center vertically.
             justifyContent: isLowerThird ? 'flex-end' : 'center',
             paddingBottom: '0'
         }}
     >
-        {/* STACK CONTAINER (Holds Header + Text Box tightly together) */}
+        {/* STACK CONTAINER: Holds Header + Text Box tightly together */}
         <div
             style={{
                 display: 'flex',
@@ -61,29 +71,28 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
                 alignItems: stackAlignItems,
                 width: isLowerThird ? '95%' : '100%',
                 alignSelf: 'center', // Center the stack horizontally in the screen
-                // GAP: This is the "One line" distance. 0.2em is very tight.
-                gap: '0.2em',
+                gap: '0.2em', // The "One Line" spacing
             }}
         >
 
-            {/* HEADER TAB */}
+            {/* HEADER / TITLE */}
             <div
                 style={{
                     backgroundColor: theme.headerBackgroundColor || '#000000',
                     color: theme.headerTextColor || '#ffffff',
-                    fontSize: isPreview ? '0.8em' : '1.5em',
+                    fontSize: calcHeaderSize, // Dynamic Header Size
                     padding: isPreview ? '0.2em 0.5em' : '0.2em 1em',
                     fontWeight: 'bold',
                     borderRadius: '0.2em',
                     zIndex: 20,
-                    // Prevent header from stretching full width if text is small
                     alignSelf: stackAlignItems,
+                    boxShadow: 'none', // Removed for clean keying
                 }}
             >
                 {content.reference}
             </div>
 
-            {/* MAIN TEXT BOX */}
+            {/* MAIN TEXT BODY */}
             <div
                 ref={boxRef}
                 style={{
@@ -92,8 +101,7 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
                     zIndex: 10,
                     overflow: 'hidden',
                     width: '100%',
-                    // FIX: Changed from fixed height (40%) to AUTO.
-                    // This creates the "Shrink Wrap" effect you wanted.
+                    // Height is AUTO to shrink-wrap the text
                     height: 'auto',
                     maxHeight: '100%',
                     borderRadius: '0.2em',
@@ -104,7 +112,7 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
                     style={{
                         color: theme.textColor || '#ffffff',
                         width: '100%',
-                        // FIX: Use Percentage padding for perfect scaling
+                        // Use Percentage padding for perfect scaling
                         padding: aspectRatio === '12:5' ? '2%' : '4%',
                         overflow: 'hidden',
                         wordWrap: 'break-word',
@@ -114,13 +122,12 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
                         fontFamily: fontFamily,
                         display: hasSecondary ? 'grid' : 'flex',
                         flexDirection: 'column',
-                        // Align text inside the box
                         justifyContent: 'center',
                         gridTemplateColumns: hasSecondary ? '1fr 1fr' : undefined,
                         gap: hasSecondary ? '5%' : '0',
                         textAlign: textAlign,
                         alignItems: textAlign === 'center' ? 'center' : 'flex-start',
-                        lineHeight: '1.1' // Tight line height for compact look
+                        lineHeight: '1.1' // Tight line height
                     }}
                 >
                     <div className={`${hasSecondary ? "border-r border-slate-600 pr-5" : "w-full"}`}>

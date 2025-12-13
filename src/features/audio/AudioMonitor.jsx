@@ -8,7 +8,7 @@ import useSongLibrary from '../../hooks/useSongLibrary';
 import ResizableGrid from '../../components/ResizableGrid';
 import ResizableVerticalStack from '../../components/ResizableVerticalStack';
 import SlideRenderer from '../../components/SlideRenderer';
-import ScaledPreview from '../../components/ScaledPreview'; // NEW IMPORT
+import ScaledPreview from '../../components/ScaledPreview'; // Make sure you created this file!
 
 import kjvData from '../../data/kjv.json';
 import nivData from '../../data/niv.json';
@@ -265,7 +265,6 @@ const AudioMonitor = () => {
                             <h3 className="text-xl font-bold text-white">{activeScripture.reference} <span className="text-xs font-normal text-purple-300">({activeScripture.version})</span></h3>
                             <button onClick={() => toggleFavorite(activeScripture)} className={`text-lg hover:scale-110 transition-transform ${isFavorited(activeScripture) ? 'text-yellow-400' : 'text-slate-600 hover:text-yellow-200'}`} title="Favorite">★</button>
                         </div>
-
                         <div className="flex gap-2">
                             <button onClick={() => handleAddToAgenda(activeScripture)} className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded font-bold text-xs transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-sm" title="Add to Agenda">+ Agenda</button>
                             <button onClick={() => handleProject(activeScripture)} className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-1.5 rounded font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer text-xs uppercase tracking-widest">PROJECT</button>

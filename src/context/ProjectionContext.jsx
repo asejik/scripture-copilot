@@ -3,13 +3,18 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 const ProjectionContext = createContext();
 
 export const ProjectionProvider = ({ children }) => {
-  // 1. Load Saved Data
   const [liveScripture, setLiveScripture] = useState(() => {
     try { return JSON.parse(localStorage.getItem('current_scripture')); } catch (e) { return null; }
   });
 
+  // Body Font Size
   const [fontSize, setFontSize] = useState(() => {
     try { return parseInt(localStorage.getItem('projection_font_size')) || 60; } catch (e) { return 60; }
+  });
+
+  // NEW: Header Font Size
+  const [headerFontSize, setHeaderFontSize] = useState(() => {
+    try { return parseInt(localStorage.getItem('projection_header_font_size')) || 40; } catch (e) { return 40; }
   });
 
   const [layoutMode, setLayoutMode] = useState(() => {
@@ -17,7 +22,7 @@ export const ProjectionProvider = ({ children }) => {
   });
 
   const [theme, setTheme] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('projection_theme')) || { backgroundColor: '#0f172a', textColor: '#ffffff', headerBackgroundColor: '#581c87', headerTextColor: '#ffffff' }; } catch (e) { return { backgroundColor: '#0f172a', textColor: '#ffffff', headerBackgroundColor: '#581c87', headerTextColor: '#ffffff' }; }
+    try { return JSON.parse(localStorage.getItem('projection_theme')) || { backgroundColor: '#00b140', textColor: '#ffffff', headerBackgroundColor: '#581c87', headerTextColor: '#ffffff' }; } catch (e) { return { backgroundColor: '#00b140', textColor: '#ffffff', headerBackgroundColor: '#581c87', headerTextColor: '#ffffff' }; }
   });
 
   const [textAlign, setTextAlign] = useState(() => {
@@ -36,7 +41,6 @@ export const ProjectionProvider = ({ children }) => {
     try { return localStorage.getItem('projection_font_family') || 'sans-serif'; } catch (e) { return 'sans-serif'; }
   });
 
-  // NEW: Header Position (TOP_LEFT, TOP_CENTER, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_CENTER, BOTTOM_RIGHT)
   const [headerPosition, setHeaderPosition] = useState(() => {
     try { return localStorage.getItem('projection_header_position') || 'TOP_CENTER'; } catch (e) { return 'TOP_CENTER'; }
   });
@@ -106,14 +110,14 @@ export const ProjectionProvider = ({ children }) => {
           setLiveScripture(null);
           localStorage.removeItem('current_scripture');
         } else if (type === 'UPDATE_STYLE') {
-          setFontSize(payload.fontSize);
-          localStorage.setItem('projection_font_size', payload.fontSize);
+          // Sync all style props
+          if(payload.fontSize) { setFontSize(payload.fontSize); localStorage.setItem('projection_font_size', payload.fontSize); }
+          if(payload.headerFontSize) { setHeaderFontSize(payload.headerFontSize); localStorage.setItem('projection_header_font_size', payload.headerFontSize); }
           if(payload.textTransform) { setTextTransform(payload.textTransform); localStorage.setItem('projection_text_transform', payload.textTransform); }
           if(payload.fontFamily) { setFontFamily(payload.fontFamily); localStorage.setItem('projection_font_family', payload.fontFamily); }
         } else if (type === 'UPDATE_LAYOUT') {
           setLayoutMode(payload.layoutMode);
           localStorage.setItem('projection_layout_mode', payload.layoutMode);
-          // NEW: Sync Header Position
           if (payload.headerPosition) { setHeaderPosition(payload.headerPosition); localStorage.setItem('projection_header_position', payload.headerPosition); }
         } else if (type === 'UPDATE_ALIGN') {
           setTextAlign(payload.textAlign);
@@ -159,35 +163,41 @@ export const ProjectionProvider = ({ children }) => {
   const updateLayoutMode = (m) => { setLayoutMode(m); try { localStorage.setItem('projection_layout_mode', m); } catch(e){} broadcast('UPDATE_LAYOUT', { layoutMode: m, headerPosition }); };
   const updateTextAlign = (a) => { setTextAlign(a); try { localStorage.setItem('projection_text_align', a); } catch(e){} broadcast('UPDATE_ALIGN', { textAlign: a }); };
   const updateAspectRatio = (r) => { setAspectRatio(r); try { localStorage.setItem('projection_aspect_ratio', r); } catch(e){} broadcast('UPDATE_ASPECT', { aspectRatio: r }); };
-  const updateTheme = (k, v) => { const t = { ...theme, [k]: v }; setTheme(t); try { localStorage.setItem('projection_theme', JSON.stringify(t)); } catch(e){} broadcast('UPDATE_THEME', { theme: t }); };
+
+  const updateTheme = (newThemePartial) => {
+      const t = { ...theme, ...newThemePartial };
+      setTheme(t);
+      try { localStorage.setItem('projection_theme', JSON.stringify(t)); } catch(e){}
+      broadcast('UPDATE_THEME', { theme: t });
+  };
 
   const updateStyle = (newStyle) => {
       if(newStyle.fontSize) { setFontSize(newStyle.fontSize); try { localStorage.setItem('projection_font_size', newStyle.fontSize); } catch(e){} }
+      if(newStyle.headerFontSize) { setHeaderFontSize(newStyle.headerFontSize); try { localStorage.setItem('projection_header_font_size', newStyle.headerFontSize); } catch(e){} }
       if(newStyle.textTransform) { setTextTransform(newStyle.textTransform); try { localStorage.setItem('projection_text_transform', newStyle.textTransform); } catch(e){} }
       if(newStyle.fontFamily) { setFontFamily(newStyle.fontFamily); try { localStorage.setItem('projection_font_family', newStyle.fontFamily); } catch(e){} }
 
       broadcast('UPDATE_STYLE', {
           fontSize: newStyle.fontSize || fontSize,
+          headerFontSize: newStyle.headerFontSize || headerFontSize,
           textTransform: newStyle.textTransform || textTransform,
           fontFamily: newStyle.fontFamily || fontFamily
       });
   };
 
-  // NEW: Update Header Position Action
   const updateHeaderPosition = (pos) => {
       setHeaderPosition(pos);
       try { localStorage.setItem('projection_header_position', pos); } catch(e){}
-      // Reuse LAYOUT broadcast channel for simplicity, or add new one. Reusing keeps it sync.
       broadcast('UPDATE_LAYOUT', { layoutMode, headerPosition: pos });
   };
 
   const resetSettings = () => {
-    updateStyle({ fontSize: 60, textTransform: 'none', fontFamily: 'sans-serif' });
+    updateStyle({ fontSize: 60, headerFontSize: 40, textTransform: 'none', fontFamily: 'sans-serif' });
     updateLayoutMode('LOWER_THIRD');
     updateTextAlign('center');
     updateAspectRatio('16:9');
-    updateHeaderPosition('TOP_CENTER'); // Default
-    const defaultTheme = { backgroundColor: '#0f172a', textColor: '#ffffff', headerBackgroundColor: '#581c87', headerTextColor: '#ffffff' };
+    updateHeaderPosition('TOP_CENTER');
+    const defaultTheme = { backgroundColor: '#00b140', textColor: '#ffffff', headerBackgroundColor: '#581c87', headerTextColor: '#ffffff' };
     setTheme(defaultTheme); try { localStorage.setItem('projection_theme', JSON.stringify(defaultTheme)); } catch(e){} broadcast('UPDATE_THEME', { theme: defaultTheme });
   };
 
@@ -195,11 +205,11 @@ export const ProjectionProvider = ({ children }) => {
     <ProjectionContext.Provider value={{
         liveScripture, projectScripture, projectSong, clearProjection, nextSlide, prevSlide, currentSlideIndex,
         totalSlides: slides.length, slides, jumpToSlide,
-        fontSize, textTransform, fontFamily, updateStyle,
+        fontSize, headerFontSize, textTransform, fontFamily, updateStyle,
         theme, updateTheme,
         layoutMode, updateLayoutMode, textAlign, updateTextAlign,
         aspectRatio, updateAspectRatio, resetSettings,
-        headerPosition, updateHeaderPosition // EXPORT
+        headerPosition, updateHeaderPosition
     }}>
       {children}
     </ProjectionContext.Provider>

@@ -17,15 +17,14 @@ const SYSTEM_FONTS = [
 
 const SettingsDashboard = () => {
   const {
-    fontSize, updateStyle, textTransform, fontFamily,
+    fontSize, headerFontSize, updateStyle, textTransform, fontFamily, // NEW: headerFontSize
     layoutMode, updateLayoutMode,
     textAlign, updateTextAlign,
     aspectRatio, updateAspectRatio,
     theme, updateTheme, resetSettings,
-    headerPosition, updateHeaderPosition // NEW
+    headerPosition, updateHeaderPosition
   } = useProjection();
 
-  // Helper to render position buttons
   const renderPosBtn = (pos, label) => (
       <button
         onClick={() => updateHeaderPosition(pos)}
@@ -38,9 +37,9 @@ const SettingsDashboard = () => {
   );
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto h-full overflow-y-auto pb-20">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto h-full overflow-y-auto pb-20 custom-scrollbar">
 
-      {/* --- COLUMN 1: LAYOUT & COLORS --- */}
+      {/* ... (Left Column remains same) ... */}
       <div className="space-y-6">
         <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 shadow-xl">
           <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">📺 Display Layout</h2>
@@ -49,22 +48,11 @@ const SettingsDashboard = () => {
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Projection Mode</label>
               <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => updateLayoutMode('LOWER_THIRD')}
-                  className={`p-3 rounded border text-sm font-bold transition-all ${layoutMode === 'LOWER_THIRD' ? 'bg-purple-600 border-purple-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}
-                >
-                  Lower Third
-                </button>
-                <button
-                  onClick={() => updateLayoutMode('CENTER')}
-                  className={`p-3 rounded border text-sm font-bold transition-all ${layoutMode === 'CENTER' ? 'bg-purple-600 border-purple-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}
-                >
-                  Center Stage
-                </button>
+                <button onClick={() => updateLayoutMode('LOWER_THIRD')} className={`p-3 rounded border text-sm font-bold transition-all ${layoutMode === 'LOWER_THIRD' ? 'bg-purple-600 border-purple-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}>Lower Third</button>
+                <button onClick={() => updateLayoutMode('CENTER')} className={`p-3 rounded border text-sm font-bold transition-all ${layoutMode === 'CENTER' ? 'bg-purple-600 border-purple-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}>Center Stage</button>
               </div>
             </div>
 
-            {/* NEW: HEADER POSITION GRID */}
             <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Title / Reference Position</label>
                 <div className="grid grid-cols-3 gap-2">
@@ -89,6 +77,7 @@ const SettingsDashboard = () => {
           </div>
         </div>
 
+        {/* ... (Theme Colors Section remains same) ... */}
         <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 shadow-xl">
           <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">🎨 Custom Colors</h2>
           <div className="space-y-6">
@@ -111,7 +100,6 @@ const SettingsDashboard = () => {
                     </div>
                 </div>
             </div>
-
             <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase mb-2 border-b border-slate-700 pb-1">Lyrics / Scripture Body</label>
                 <div className="grid grid-cols-2 gap-4">
@@ -131,11 +119,8 @@ const SettingsDashboard = () => {
                     </div>
                 </div>
             </div>
-
             <div className="pt-4 border-t border-slate-800">
-                <button onClick={() => { if(confirm('Reset ALL settings to factory defaults?')) resetSettings(); }} className="w-full bg-red-900/20 hover:bg-red-900/50 text-red-400 border border-red-900/50 py-3 rounded font-bold transition-colors">
-                    ⟳ Factory Reset All
-                </button>
+                <button onClick={() => { if(confirm('Reset ALL settings to factory defaults?')) resetSettings(); }} className="w-full bg-red-900/20 hover:bg-red-900/50 text-red-400 border border-red-900/50 py-3 rounded font-bold transition-colors">⟳ Factory Reset All</button>
             </div>
           </div>
         </div>
@@ -166,16 +151,23 @@ const SettingsDashboard = () => {
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Alignment</label>
               <select value={textAlign} onChange={(e) => updateTextAlign(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded p-3 text-white focus:border-purple-500 outline-none">
-                <option value="left">Left Align</option>
-                <option value="center">Center Align</option>
-                <option value="right">Right Align</option>
-                <option value="justify">Justify Full</option>
+                <option value="left">Left Align</option><option value="center">Center Align</option><option value="right">Right Align</option><option value="justify">Justify Full</option>
               </select>
             </div>
 
+            {/* HEADER FONT SIZE SLIDER */}
             <div>
                <div className="flex justify-between items-end mb-2">
-                    <label className="block text-xs font-bold text-slate-400 uppercase">Base Font Size</label>
+                    <label className="block text-xs font-bold text-slate-400 uppercase">Header Font Size</label>
+                    <span className="text-xs font-mono text-purple-400">{headerFontSize}px</span>
+               </div>
+               <input type="range" min="20" max="100" step="2" value={headerFontSize} onChange={(e) => updateStyle({ headerFontSize: parseInt(e.target.value) })} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500" />
+            </div>
+
+            {/* BODY FONT SIZE SLIDER */}
+            <div>
+               <div className="flex justify-between items-end mb-2">
+                    <label className="block text-xs font-bold text-slate-400 uppercase">Body Font Size</label>
                     <span className="text-xs font-mono text-purple-400">{fontSize}px</span>
                </div>
                <input type="range" min="30" max="120" step="2" value={fontSize} onChange={(e) => updateStyle({ fontSize: parseInt(e.target.value) })} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500" />

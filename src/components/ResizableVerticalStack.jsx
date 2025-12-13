@@ -8,8 +8,6 @@ const ResizableVerticalStack = ({ top, bottom, initialSplit = 50 }) => {
     const handleMouseMove = (e) => {
       if (!isDragging) return;
 
-      // Calculate percentage based on window height (approximate container height)
-      // A cleaner way is using ref, but window height works well enough for full-screen apps
       const containerHeight = window.innerHeight - 100; // Minus headers
       const deltaPercent = (e.movementY / containerHeight) * 100;
 
@@ -36,7 +34,8 @@ const ResizableVerticalStack = ({ top, bottom, initialSplit = 50 }) => {
   return (
     <div className="flex flex-col h-full w-full overflow-hidden select-none">
       {/* TOP SECTION */}
-      <div style={{ height: `${split}%` }} className="min-h-[150px] overflow-hidden">
+      {/* Keep overflow-hidden here so the transcript scrolls nicely */}
+      <div style={{ height: `${split}%` }} className="min-h-[150px] overflow-hidden relative z-0">
         {top}
       </div>
 
@@ -50,7 +49,8 @@ const ResizableVerticalStack = ({ top, bottom, initialSplit = 50 }) => {
       </div>
 
       {/* BOTTOM SECTION */}
-      <div style={{ height: `${100 - split}%` }} className="min-h-[150px] overflow-hidden">
+      {/* FIX: Removed 'overflow-hidden' and added 'z-20' so dropdowns appear ON TOP of the section above */}
+      <div style={{ height: `${100 - split}%` }} className="min-h-[150px] relative z-20">
         {bottom}
       </div>
     </div>

@@ -4,19 +4,18 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
   const containerRef = useRef(null);
   const boxRef = useRef(null);
 
-  // Auto-shrink logic (Same as before, but isolated here)
+  // Auto-shrink logic
   useLayoutEffect(() => {
     if (!containerRef.current) return;
     const el = containerRef.current;
 
-    // In Preview mode, we might want to skip heavy DOM manipulation or throttle it,
-    // but for fidelity, we run the same logic.
+    // Reset to base size first
     el.style.fontSize = `${fontSize}px`;
 
     let currentSize = fontSize;
     let iterations = 0;
 
-    // We only shrink if it overflows the container
+    // Shrink if overflowing
     while (
       (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth) &&
       currentSize > 16 &&
@@ -33,20 +32,19 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
   const isLowerThird = layoutMode === 'LOWER_THIRD';
   const hasSecondary = !!content.secondaryText;
 
-  // Aspect Ratio Calculation
-  // We use CSS aspect-ratio. For Preview mode, we scale this whole component down using CSS transform in the parent.
+  // Aspect Ratio
   const ratioValue = aspectRatio === '12:5' ? '2.4 / 1' : '16 / 9';
 
   return (
     <div
         style={{
             width: '100%',
-            height: '100%', // Fill parent (which enforces ratio)
+            height: '100%',
             display: 'flex',
             flexDirection: 'column',
             position: 'relative',
-            justifyContent: isLowerThird ? 'flex-end' : 'center', // Key Layout Diff
-            paddingBottom: isLowerThird ? '3%' : '0'
+            justifyContent: isLowerThird ? 'flex-end' : 'center',
+            paddingBottom: isLowerThird ? '0' : '0' // Removed bottom padding to maximize space
         }}
     >
         {/* HEADER TAB */}
@@ -60,7 +58,7 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
                 marginRight: isLowerThird ? '0' : 'auto',
                 marginBottom: '-1px',
                 zIndex: 20,
-                fontSize: isPreview ? '1.5em' : '2em', // Slight adjustment for preview readability
+                fontSize: isPreview ? '1em' : '2em', // Scaled for preview vs projector
                 padding: '0.2em 1em',
                 borderRadius: '0.5em 0.5em 0 0',
                 fontWeight: 'bold',
@@ -80,9 +78,9 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
                 position: 'relative',
                 zIndex: 10,
                 overflow: 'hidden',
-                flex: isLowerThird ? '0 0 auto' : '1', // Lower Third has fixed height relative to content usually, but here we fill ratio
-                height: isLowerThird ? '35%' : '100%', // Lower Third takes bottom 35%
-                width: isLowerThird ? '90%' : '100%',
+                // Lower Third height increased to 40% to allow larger text
+                height: isLowerThird ? '40%' : '100%',
+                width: isLowerThird ? '95%' : '100%',
                 alignSelf: 'center',
                 borderRadius: isLowerThird ? '1em' : '1em',
                 boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)'
@@ -94,7 +92,8 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
                     color: theme.textColor || '#ffffff',
                     width: '100%',
                     height: '100%',
-                    padding: aspectRatio === '12:5' ? '2em 4em' : '3em 4em',
+                    // FIX: Reverted to PX values so padding doesn't explode when font is large
+                    padding: aspectRatio === '12:5' ? '40px 60px' : '60px 80px',
                     overflow: 'hidden',
                     wordWrap: 'break-word',
                     whiteSpace: 'pre-wrap',
@@ -103,17 +102,17 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
                     fontFamily: fontFamily,
                     display: hasSecondary ? 'grid' : 'flex',
                     flexDirection: 'column',
-                    justifyContent: isLowerThird ? 'center' : 'flex-start',
+                    justifyContent: isLowerThird ? 'center' : 'center', // Always center vertically in box
                     gridTemplateColumns: hasSecondary ? '1fr 1fr' : undefined,
-                    gap: hasSecondary ? '2em' : '0',
+                    gap: hasSecondary ? '40px' : '0',
                     textAlign: textAlign,
                     alignItems: textAlign === 'center' ? 'center' : 'flex-start',
-                    lineHeight: '1.4'
+                    lineHeight: '1.2' // FIX: Tighter line height allows larger font
                 }}
             >
                 <div className={`${hasSecondary ? "border-r border-slate-600 pr-5" : "w-full"}`}>
                     {hasSecondary && (
-                        <div style={{ fontSize: '0.6em', opacity: 0.7, marginBottom: '0.5em', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#d8b4fe' }}>
+                        <div style={{ fontSize: '0.5em', opacity: 0.7, marginBottom: '0.5em', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#d8b4fe' }}>
                             {content.version}
                         </div>
                     )}
@@ -121,7 +120,7 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
                 </div>
                 {hasSecondary && (
                     <div className="pl-5">
-                        <div style={{ fontSize: '0.6em', opacity: 0.7, marginBottom: '0.5em', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#d8b4fe' }}>
+                        <div style={{ fontSize: '0.5em', opacity: 0.7, marginBottom: '0.5em', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#d8b4fe' }}>
                             {content.secondaryVersion}
                         </div>
                         <p style={{ opacity: 0.9 }}>{content.secondaryText}</p>

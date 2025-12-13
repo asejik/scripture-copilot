@@ -3,6 +3,7 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 const ProjectionContext = createContext();
 
 export const ProjectionProvider = ({ children }) => {
+  // 1. Load Saved Data
   const [liveScripture, setLiveScripture] = useState(() => {
     try { return JSON.parse(localStorage.getItem('current_scripture')); } catch (e) { return null; }
   });
@@ -15,7 +16,6 @@ export const ProjectionProvider = ({ children }) => {
     try { return localStorage.getItem('projection_layout_mode') || 'LOWER_THIRD'; } catch (e) { return 'LOWER_THIRD'; }
   });
 
-  // FIXED: Default to Chroma Green background, White text
   const [theme] = useState({ backgroundColor: '#00b140', textColor: '#ffffff' });
 
   const [textAlign, setTextAlign] = useState(() => {
@@ -31,13 +31,12 @@ export const ProjectionProvider = ({ children }) => {
 
   const channelName = 'scripture_copilot';
 
-  const createSlides = (scripture) => {
+  // --- SCRIPTURE LOGIC ---
+  const createScriptureSlides = (scripture) => {
     if (!scripture.verseList) {
         let ref = scripture.reference;
-        if (scripture.version && !ref.includes(`(${scripture.version})`)) {
-            ref += ` (${scripture.version})`;
-        }
-        return [{ ...scripture, reference: ref }];
+        if (scripture.version && !ref.includes(`(${scripture.version})`)) ref += ` (${scripture.version})`;
+        return [{ ...scripture, type: 'scripture', reference: ref }];
     }
 
     const VERSES_PER_SLIDE = 1;
@@ -53,10 +52,10 @@ export const ProjectionProvider = ({ children }) => {
 
         let ref = `${baseRef}:${primaryV.verse}`;
         if (version) ref += ` (${version})`;
-
         if (secondaryV && secondaryVersion) ref += ` / (${secondaryVersion})`;
 
         chunks.push({
+            type: 'scripture',
             reference: ref,
             text: slideText,
             version: version,
@@ -67,6 +66,21 @@ export const ProjectionProvider = ({ children }) => {
         });
     }
     return chunks;
+  };
+
+  // --- NEW: SONG LOGIC ---
+  const createSongSlides = (song) => {
+    // Split by double newline to get stanzas
+    const rawSlides = song.lyrics.split(/\n\n+/).filter(s => s.trim() !== '');
+
+    return rawSlides.map((text, index) => ({
+        type: 'song',
+        reference: song.title, // Header becomes Title
+        subHeader: song.author, // Optional subheader
+        text: text, // The lyrics
+        totalSlides: rawSlides.length,
+        slideIndex: index + 1
+    }));
   };
 
   useEffect(() => {
@@ -104,10 +118,20 @@ export const ProjectionProvider = ({ children }) => {
     channel.close();
   };
 
+  // --- ACTIONS ---
+
   const projectScripture = (scripture) => {
-    const s = createSlides(scripture);
+    const s = createScriptureSlides(scripture);
     setSlides(s); setCurrentSlideIndex(0);
     updateProjection(s[0]);
+  };
+
+  // NEW: Project Song
+  const projectSong = (song, startIndex = 0) => {
+    const s = createSongSlides(song);
+    setSlides(s);
+    setCurrentSlideIndex(startIndex);
+    updateProjection(s[startIndex]);
   };
 
   const nextSlide = () => { if (currentSlideIndex < slides.length - 1) { const i = currentSlideIndex + 1; setCurrentSlideIndex(i); updateProjection(slides[i]); }};
@@ -127,7 +151,10 @@ export const ProjectionProvider = ({ children }) => {
 
   return (
     <ProjectionContext.Provider value={{
-        liveScripture, projectScripture, clearProjection, nextSlide, prevSlide, currentSlideIndex,
+        liveScripture,
+        projectScripture,
+        projectSong, // EXPORT NEW FUNCTION
+        clearProjection, nextSlide, prevSlide, currentSlideIndex,
         totalSlides: slides.length, slides, jumpToSlide,
         fontSize, updateFontSize, theme,
         layoutMode, updateLayoutMode, textAlign, updateTextAlign,

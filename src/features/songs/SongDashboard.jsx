@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
 import useSongLibrary from '../../hooks/useSongLibrary';
+import { useProjection } from '../../context/ProjectionContext'; // Import Context
 import SongEditorModal from './SongEditorModal';
 
 const SongDashboard = () => {
   const { songs, agenda, addSong, updateSong, deleteSong, addToAgenda, removeFromAgenda, clearAgenda } = useSongLibrary();
 
+  // Connect to Projection Context
+  const { projectSong, clearProjection } = useProjection();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSong, setEditingSong] = useState(null);
-
-  // The song currently being previewed/projected in the Middle Column
   const [activeSong, setActiveSong] = useState(null);
 
-  // Filter songs based on search
   const filteredSongs = songs.filter(s =>
     s.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     s.lyrics.toLowerCase().includes(searchTerm.toLowerCase())
@@ -31,22 +32,27 @@ const SongDashboard = () => {
   const handleSave = (songData) => {
     if (songData.id) {
         updateSong(songData);
-        if (activeSong?.id === songData.id) setActiveSong(songData); // Update preview if active
+        if (activeSong?.id === songData.id) setActiveSong(songData);
     } else {
         addSong(songData);
     }
   };
 
-  // Helper to split lyrics into slides (by double newline)
   const getSlides = (lyrics) => {
     if (!lyrics) return [];
     return lyrics.split(/\n\n+/).filter(s => s.trim() !== '');
   };
 
+  // Handler for Project Button
+  const handleProjectSlide = (index) => {
+    if (activeSong) {
+        projectSong(activeSong, index);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-8rem)]">
 
-      {/* --- MODAL --- */}
       <SongEditorModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -113,6 +119,8 @@ const SongDashboard = () => {
                         <p className="text-xs text-slate-400">{activeSong.author}</p>
                     </div>
                     <div className="flex gap-2">
+                        <button onClick={clearProjection} className="text-xs bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded transition-colors cursor-pointer font-bold">CLEAR SCREEN</button>
+                        <div className="w-px h-6 bg-slate-600 mx-1"></div>
                         <button onClick={() => deleteSong(activeSong.id)} className="text-xs bg-red-900/30 hover:bg-red-900 text-red-400 hover:text-white px-3 py-1 rounded transition-colors cursor-pointer">Delete</button>
                         <button onClick={() => handleEdit(activeSong)} className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1 rounded transition-colors cursor-pointer">✎ Edit</button>
                     </div>
@@ -122,10 +130,17 @@ const SongDashboard = () => {
                     {getSlides(activeSong.lyrics).map((slide, idx) => (
                         <div key={idx} className="group relative">
                             <div className="absolute -left-4 top-0 text-[10px] text-slate-600 font-mono">{idx + 1}</div>
-                            <p className="text-slate-300 leading-relaxed p-4 rounded hover:bg-slate-900 border border-transparent hover:border-slate-800 cursor-pointer transition-all whitespace-pre-wrap">
+                            {/* CLICK TO PROJECT */}
+                            <p
+                                onClick={() => handleProjectSlide(idx)}
+                                className="text-slate-300 leading-relaxed p-4 rounded hover:bg-slate-900 border border-transparent hover:border-blue-500/50 cursor-pointer transition-all whitespace-pre-wrap"
+                            >
                                 {slide}
                             </p>
-                            <button className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 bg-purple-600 hover:bg-purple-500 text-white text-[10px] px-3 py-1 rounded shadow-lg font-bold transition-all">
+                            <button
+                                onClick={() => handleProjectSlide(idx)}
+                                className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 bg-purple-600 hover:bg-purple-500 text-white text-[10px] px-3 py-1 rounded shadow-lg font-bold transition-all"
+                            >
                                 PROJECT 📺
                             </button>
                         </div>

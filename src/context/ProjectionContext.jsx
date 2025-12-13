@@ -16,23 +16,8 @@ export const ProjectionProvider = ({ children }) => {
     try { return localStorage.getItem('projection_layout_mode') || 'LOWER_THIRD'; } catch (e) { return 'LOWER_THIRD'; }
   });
 
-  // UPDATED: Theme now has 4 colors (Header vs Body)
   const [theme, setTheme] = useState(() => {
-    try {
-        return JSON.parse(localStorage.getItem('projection_theme')) || {
-            backgroundColor: '#0f172a', // Slate 900
-            textColor: '#ffffff',
-            headerBackgroundColor: '#581c87', // Purple 900
-            headerTextColor: '#ffffff'
-        };
-    } catch (e) {
-        return {
-            backgroundColor: '#0f172a',
-            textColor: '#ffffff',
-            headerBackgroundColor: '#581c87',
-            headerTextColor: '#ffffff'
-        };
-    }
+    try { return JSON.parse(localStorage.getItem('projection_theme')) || { backgroundColor: '#0f172a', textColor: '#ffffff', headerBackgroundColor: '#581c87', headerTextColor: '#ffffff' }; } catch (e) { return { backgroundColor: '#0f172a', textColor: '#ffffff', headerBackgroundColor: '#581c87', headerTextColor: '#ffffff' }; }
   });
 
   const [textAlign, setTextAlign] = useState(() => {
@@ -49,6 +34,11 @@ export const ProjectionProvider = ({ children }) => {
 
   const [fontFamily, setFontFamily] = useState(() => {
     try { return localStorage.getItem('projection_font_family') || 'sans-serif'; } catch (e) { return 'sans-serif'; }
+  });
+
+  // NEW: Header Position (TOP_LEFT, TOP_CENTER, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_CENTER, BOTTOM_RIGHT)
+  const [headerPosition, setHeaderPosition] = useState(() => {
+    try { return localStorage.getItem('projection_header_position') || 'TOP_CENTER'; } catch (e) { return 'TOP_CENTER'; }
   });
 
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -123,6 +113,8 @@ export const ProjectionProvider = ({ children }) => {
         } else if (type === 'UPDATE_LAYOUT') {
           setLayoutMode(payload.layoutMode);
           localStorage.setItem('projection_layout_mode', payload.layoutMode);
+          // NEW: Sync Header Position
+          if (payload.headerPosition) { setHeaderPosition(payload.headerPosition); localStorage.setItem('projection_header_position', payload.headerPosition); }
         } else if (type === 'UPDATE_ALIGN') {
           setTextAlign(payload.textAlign);
           localStorage.setItem('projection_text_align', payload.textAlign);
@@ -163,17 +155,11 @@ export const ProjectionProvider = ({ children }) => {
 
   const updateProjection = (s) => { setLiveScripture(s); try { localStorage.setItem('current_scripture', JSON.stringify(s)); } catch(e){} broadcast('UPDATE_SLIDE', s); };
   const clearProjection = () => { setLiveScripture(null); setSlides([]); try { localStorage.removeItem('current_scripture'); } catch(e){} broadcast('CLEAR_SCREEN'); };
-  const updateLayoutMode = (m) => { setLayoutMode(m); try { localStorage.setItem('projection_layout_mode', m); } catch(e){} broadcast('UPDATE_LAYOUT', { layoutMode: m }); };
+
+  const updateLayoutMode = (m) => { setLayoutMode(m); try { localStorage.setItem('projection_layout_mode', m); } catch(e){} broadcast('UPDATE_LAYOUT', { layoutMode: m, headerPosition }); };
   const updateTextAlign = (a) => { setTextAlign(a); try { localStorage.setItem('projection_text_align', a); } catch(e){} broadcast('UPDATE_ALIGN', { textAlign: a }); };
   const updateAspectRatio = (r) => { setAspectRatio(r); try { localStorage.setItem('projection_aspect_ratio', r); } catch(e){} broadcast('UPDATE_ASPECT', { aspectRatio: r }); };
-
-  // Update Theme now handles 4 values
-  const updateTheme = (newThemePartial) => {
-      const t = { ...theme, ...newThemePartial };
-      setTheme(t);
-      try { localStorage.setItem('projection_theme', JSON.stringify(t)); } catch(e){}
-      broadcast('UPDATE_THEME', { theme: t });
-  };
+  const updateTheme = (k, v) => { const t = { ...theme, [k]: v }; setTheme(t); try { localStorage.setItem('projection_theme', JSON.stringify(t)); } catch(e){} broadcast('UPDATE_THEME', { theme: t }); };
 
   const updateStyle = (newStyle) => {
       if(newStyle.fontSize) { setFontSize(newStyle.fontSize); try { localStorage.setItem('projection_font_size', newStyle.fontSize); } catch(e){} }
@@ -187,11 +173,20 @@ export const ProjectionProvider = ({ children }) => {
       });
   };
 
+  // NEW: Update Header Position Action
+  const updateHeaderPosition = (pos) => {
+      setHeaderPosition(pos);
+      try { localStorage.setItem('projection_header_position', pos); } catch(e){}
+      // Reuse LAYOUT broadcast channel for simplicity, or add new one. Reusing keeps it sync.
+      broadcast('UPDATE_LAYOUT', { layoutMode, headerPosition: pos });
+  };
+
   const resetSettings = () => {
     updateStyle({ fontSize: 60, textTransform: 'none', fontFamily: 'sans-serif' });
     updateLayoutMode('LOWER_THIRD');
     updateTextAlign('center');
     updateAspectRatio('16:9');
+    updateHeaderPosition('TOP_CENTER'); // Default
     const defaultTheme = { backgroundColor: '#0f172a', textColor: '#ffffff', headerBackgroundColor: '#581c87', headerTextColor: '#ffffff' };
     setTheme(defaultTheme); try { localStorage.setItem('projection_theme', JSON.stringify(defaultTheme)); } catch(e){} broadcast('UPDATE_THEME', { theme: defaultTheme });
   };
@@ -203,7 +198,8 @@ export const ProjectionProvider = ({ children }) => {
         fontSize, textTransform, fontFamily, updateStyle,
         theme, updateTheme,
         layoutMode, updateLayoutMode, textAlign, updateTextAlign,
-        aspectRatio, updateAspectRatio, resetSettings
+        aspectRatio, updateAspectRatio, resetSettings,
+        headerPosition, updateHeaderPosition // EXPORT
     }}>
       {children}
     </ProjectionContext.Provider>

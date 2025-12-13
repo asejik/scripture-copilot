@@ -21,18 +21,31 @@ const SettingsDashboard = () => {
     layoutMode, updateLayoutMode,
     textAlign, updateTextAlign,
     aspectRatio, updateAspectRatio,
-    theme, updateTheme, resetSettings
+    theme, updateTheme, resetSettings,
+    headerPosition, updateHeaderPosition // NEW
   } = useProjection();
 
+  // Helper to render position buttons
+  const renderPosBtn = (pos, label) => (
+      <button
+        onClick={() => updateHeaderPosition(pos)}
+        className={`h-10 rounded border transition-all text-[10px] font-bold uppercase
+            ${headerPosition === pos ? 'bg-purple-600 border-purple-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}
+        `}
+      >
+        {label}
+      </button>
+  );
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto h-full overflow-y-auto pb-20">
 
       {/* --- COLUMN 1: LAYOUT & COLORS --- */}
       <div className="space-y-6">
         <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 shadow-xl">
           <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">📺 Display Layout</h2>
 
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Projection Mode</label>
               <div className="grid grid-cols-2 gap-2">
@@ -51,7 +64,19 @@ const SettingsDashboard = () => {
               </div>
             </div>
 
-            {/* HIDE Screen Ratio if Lower Third is selected */}
+            {/* NEW: HEADER POSITION GRID */}
+            <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Title / Reference Position</label>
+                <div className="grid grid-cols-3 gap-2">
+                    {renderPosBtn('TOP_LEFT', 'Top L')}
+                    {renderPosBtn('TOP_CENTER', 'Top C')}
+                    {renderPosBtn('TOP_RIGHT', 'Top R')}
+                    {renderPosBtn('BOTTOM_LEFT', 'Bot L')}
+                    {renderPosBtn('BOTTOM_CENTER', 'Bot C')}
+                    {renderPosBtn('BOTTOM_RIGHT', 'Bot R')}
+                </div>
+            </div>
+
             {layoutMode !== 'LOWER_THIRD' && (
                 <div className="animate-in fade-in slide-in-from-top-2">
                 <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Screen Ratio</label>
@@ -66,10 +91,7 @@ const SettingsDashboard = () => {
 
         <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 shadow-xl">
           <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">🎨 Custom Colors</h2>
-
           <div className="space-y-6">
-
-            {/* Header Colors */}
             <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase mb-2 border-b border-slate-700 pb-1">Title / Header Box</label>
                 <div className="grid grid-cols-2 gap-4">
@@ -90,7 +112,6 @@ const SettingsDashboard = () => {
                 </div>
             </div>
 
-            {/* Body Colors */}
             <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase mb-2 border-b border-slate-700 pb-1">Lyrics / Scripture Body</label>
                 <div className="grid grid-cols-2 gap-4">
@@ -120,7 +141,7 @@ const SettingsDashboard = () => {
         </div>
       </div>
 
-      {/* --- COLUMN 2: TYPOGRAPHY (Unchanged, just kept for context) --- */}
+      {/* --- COLUMN 2: TYPOGRAPHY --- */}
       <div className="space-y-6">
         <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 shadow-xl">
           <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">Aa Typography</h2>
@@ -158,11 +179,11 @@ const SettingsDashboard = () => {
                     <span className="text-xs font-mono text-purple-400">{fontSize}px</span>
                </div>
                <input type="range" min="30" max="120" step="2" value={fontSize} onChange={(e) => updateStyle({ fontSize: parseInt(e.target.value) })} className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500" />
+               <p className="text-[10px] text-slate-500 mt-2">Note: Text will auto-shrink if it exceeds the screen bounds.</p>
             </div>
           </div>
         </div>
       </div>
-
     </div>
   );
 };

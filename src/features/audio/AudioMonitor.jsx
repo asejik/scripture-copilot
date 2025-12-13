@@ -138,7 +138,6 @@ const AudioMonitor = () => {
     setManualInput('');
   };
 
-  // Just load into preview, don't project
   const handleLoadPreview = (scripture) => {
       let finalScripture = { ...scripture };
       if (secondaryVersion !== 'NONE' && secondaryBibleData) {
@@ -206,7 +205,14 @@ const AudioMonitor = () => {
 
             <div className="relative">
                 <form onSubmit={handleManualSearch} className="flex gap-1">
-                    <input type="text" value={manualInput} onChange={handleInputChange} placeholder="Type ref (e.g. jn 3 16)..." className="flex-1 bg-slate-950 text-white border border-slate-600 rounded px-2 py-3 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-600" autoComplete="off" />
+                    <input
+                        type="text"
+                        value={manualInput}
+                        onChange={handleInputChange}
+                        placeholder="Search Scripture (e.g. John 3:16)..."
+                        className="flex-1 bg-slate-950 text-white border border-slate-600 rounded px-2 py-3 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-600"
+                        autoComplete="off"
+                    />
                     <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm">GO</button>
                 </form>
                 {showSuggestions && suggestions.length > 0 && <ul className="absolute bottom-full left-0 w-full bg-slate-800 border border-slate-600 rounded-lg shadow-xl mb-1 max-h-40 overflow-y-auto z-50">{suggestions.map((suggestion, index) => ( <li key={suggestion} onClick={() => selectSuggestion(suggestion)} className={`px-3 py-2 text-xs cursor-pointer ${index === activeSuggestionIndex ? 'bg-purple-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>{suggestion}</li> ))}</ul>}
@@ -271,7 +277,7 @@ const AudioMonitor = () => {
                             <button onClick={() => toggleFavorite(activeScripture)} className={`text-lg hover:scale-110 transition-transform ${isFavorited(activeScripture) ? 'text-yellow-400' : 'text-slate-600 hover:text-yellow-200'}`} title="Favorite">★</button>
                         </div>
 
-                        {/* --- ADDED +AGENDA BUTTON HERE --- */}
+                        {/* --- +AGENDA BUTTON IS HERE --- */}
                         <div className="flex gap-2">
                             <button onClick={() => handleAddToAgenda(activeScripture)} className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded font-bold text-xs transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-sm" title="Add to Agenda">+ Agenda</button>
                             <button onClick={() => handleProject(activeScripture)} className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-1.5 rounded font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer text-xs uppercase tracking-widest">PROJECT</button>
@@ -314,7 +320,7 @@ const AudioMonitor = () => {
                             <div key={idx} className="p-2 bg-slate-800/30 border border-slate-800 rounded flex justify-between items-center group hover:bg-slate-800 transition-colors">
                                 <div className="overflow-hidden mr-2"><span className="text-slate-300 font-bold text-xs block">{item.reference}</span><span className="text-slate-500 text-[10px] truncate block">{item.text}</span></div>
                                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => addToScriptureAgenda(item)} className="bg-slate-700 hover:bg-slate-600 text-white text-[10px] px-2 py-1 rounded" title="Add to Agenda">+</button>
+                                    <button onClick={() => handleAddToAgenda(item)} className="bg-slate-700 hover:bg-slate-600 text-white text-[10px] px-2 py-1 rounded" title="Add to Agenda">+</button>
                                     <button onClick={() => { handleLoadPreview(item); }} className="bg-purple-700 hover:bg-purple-600 text-white text-[10px] px-2 py-1 rounded">Show</button>
                                 </div>
                             </div>
@@ -338,14 +344,30 @@ const AudioMonitor = () => {
                 <div className="text-center text-slate-600 mt-10 text-xs italic">Agenda empty.</div>
             ) : (
                 scriptureAgenda.map((item, idx) => (
-                    // FIX: Click -> handleLoadPreview (Don't project yet)
-                    <div key={idx} className="flex items-center gap-2 p-2 bg-slate-800/30 border border-slate-700 rounded group hover:bg-slate-800 transition-colors cursor-pointer" onClick={() => handleLoadPreview(item)}>
-                        <span className="text-xs font-mono text-slate-500 font-bold w-4">{idx + 1}</span>
-                        <div className="flex-1 min-w-0">
-                            <h4 className="text-sm font-bold text-slate-200 truncate">{item.reference}</h4>
-                            <span className="text-[10px] text-slate-500 truncate">{item.version}</span>
+                    // FIX: Updated styles to match History list (Compact + Text Preview)
+                    <div
+                        key={idx}
+                        className="p-2 bg-slate-800/30 border border-slate-700 rounded flex justify-between items-center group hover:bg-slate-800 transition-colors cursor-pointer"
+                        onClick={() => handleLoadPreview(item)}
+                    >
+                        <div className="overflow-hidden mr-2 flex-1 min-w-0">
+                            {/* Header: Ref + Version */}
+                            <span className="text-slate-300 font-bold text-xs block truncate">
+                                {item.reference} <span className="text-slate-500 font-normal">({item.version})</span>
+                            </span>
+                            {/* Body: Preview Text */}
+                            <span className="text-slate-500 text-[10px] truncate block">
+                                {item.text}
+                            </span>
                         </div>
-                        <button onClick={(e) => { e.stopPropagation(); removeFromScriptureAgenda(item.agendaId); }} className="text-slate-500 hover:text-red-400 px-2">×</button>
+
+                        {/* Delete Button */}
+                        <button
+                            onClick={(e) => { e.stopPropagation(); removeFromScriptureAgenda(item.agendaId); }}
+                            className="text-slate-500 hover:text-red-400 px-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                            ×
+                        </button>
                     </div>
                 ))
             )}

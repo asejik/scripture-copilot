@@ -4,8 +4,10 @@ import useScriptureDetection from '../../hooks/useScriptureDetection';
 import { useProjection } from '../../context/ProjectionContext';
 import { normalizeSpokenText } from '../../utils/textNormalizer';
 import { parseScripture, fetchSecondaryText } from '../../utils/scriptureParser';
-import useSongLibrary from '../../hooks/useSongLibrary'; // NEW: For Agenda
-import ResizableGrid from '../../components/ResizableGrid'; // NEW: Layout
+import useSongLibrary from '../../hooks/useSongLibrary';
+import ResizableGrid from '../../components/ResizableGrid';
+import ResizableVerticalStack from '../../components/ResizableVerticalStack';
+import SlideRenderer from '../../components/SlideRenderer'; // NEW IMPORT
 
 import kjvData from '../../data/kjv.json';
 import nivData from '../../data/niv.json';
@@ -21,6 +23,7 @@ const AudioMonitor = () => {
   const [manualInput, setManualInput] = useState('');
   const [searchError, setSearchError] = useState(null);
   const [previewScripture, setPreviewScripture] = useState(null);
+
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
@@ -28,8 +31,11 @@ const AudioMonitor = () => {
 
   const [favorites, setFavorites] = useState(() => { try { return JSON.parse(localStorage.getItem('saved_favorites')) || []; } catch (e) { return []; }});
 
-  // NEW: Agenda Hook
-  const { scriptureAgenda, addToScriptureAgenda, removeFromScriptureAgenda, clearScriptureAgenda } = useSongLibrary();
+  // Use Global Store for Persistence
+  const {
+      scriptureAgenda, addToScriptureAgenda, removeFromScriptureAgenda, clearScriptureAgenda,
+      sessionHistory, activeDetection, addToHistory, clearHistory, updateActiveDetection
+  } = useSongLibrary();
 
   useEffect(() => { localStorage.setItem('bible_version', version); }, [version]);
   useEffect(() => { localStorage.setItem('bible_version_sec', secondaryVersion); }, [secondaryVersion]);
@@ -46,20 +52,19 @@ const AudioMonitor = () => {
   const currentBibleData = getBibleData(version);
   const secondaryBibleData = getBibleData(secondaryVersion);
 
+  // Pass addToHistory to hook so voice detection saves automatically
   const { isListening, transcript, interimTranscript, startListening, stopListening, resetTranscript, error } = useSpeechRecognition();
-  const { detectedScripture: voiceDetected, history, clearHistory, addToHistory } = useScriptureDetection(transcript + ' ' + interimTranscript, currentBibleData, version);
-  const [activeScripture, setActiveScripture] = useState(null);
+  const { detectedScripture: voiceDetected } = useScriptureDetection(transcript + ' ' + interimTranscript, currentBibleData, version);
 
-  useEffect(() => { if (voiceDetected) setActiveScripture(voiceDetected); }, [voiceDetected]);
-
+  // Sync Voice -> Active Card (Global Store)
   useEffect(() => {
-    if (activeScripture) {
-        const updatedResult = parseScripture(activeScripture.reference, currentBibleData, version);
-        if (updatedResult) setActiveScripture(updatedResult);
-    }
-  }, [version, currentBibleData]);
+      if (voiceDetected) {
+          updateActiveDetection(voiceDetected);
+          addToHistory(voiceDetected); // Save to history
+      }
+  }, [voiceDetected]);
 
-  const { projectScripture, projectSong, liveScripture, nextSlide, prevSlide, currentSlideIndex, slides, jumpToSlide, theme, fontFamily, textTransform } = useProjection();
+  const { projectScripture, liveScripture, nextSlide, prevSlide, currentSlideIndex, slides, jumpToSlide, theme, fontFamily, textTransform, fontSize, layoutMode, textAlign, aspectRatio } = useProjection();
 
   const bottomRef = useRef(null);
   useEffect(() => { if (bottomRef.current) bottomRef.current.scrollIntoView({ behavior: 'smooth' }); }, [transcript, interimTranscript]);
@@ -88,14 +93,14 @@ const AudioMonitor = () => {
             case 'ArrowRight': nextSlide(); break;
             case 'ArrowLeft': prevSlide(); break;
             case 'Enter': if (previewScripture && !e.shiftKey) { e.preventDefault(); confirmProjection(); } break;
-            case 'p': if (e.altKey && activeScripture) handleProject(activeScripture); break;
+            case 'p': if (e.altKey && activeDetection) handleProject(activeDetection); break;
             case '?': if (e.shiftKey) setShowHelp(prev => !prev); break;
             default: break;
         }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [previewScripture, activeScripture, nextSlide, prevSlide, showSuggestions, suggestions, activeSuggestionIndex, showHelp]);
+  }, [previewScripture, activeDetection, nextSlide, prevSlide, showSuggestions, suggestions, activeSuggestionIndex, showHelp]);
 
   const handleManualSearch = (e) => {
     e.preventDefault(); setSearchError(null); setPreviewScripture(null);
@@ -116,7 +121,7 @@ const AudioMonitor = () => {
         }
     }
     projectScripture(finalScripture);
-    setActiveScripture(scripture);
+    updateActiveDetection(scripture);
     addToHistory(scripture);
     setPreviewScripture(null);
     setManualInput('');
@@ -131,8 +136,8 @@ const AudioMonitor = () => {
   }
 
   const exportHistory = () => {
-    if (history.length === 0) return; const date = new Date().toLocaleDateString(); let content = `SERMON SCRIPTURE NOTES - ${date}\n\n`;
-    [...history].reverse().forEach((item, index) => { content += `${index + 1}. ${item.reference} (${item.version})\n`; content += `"${item.text}"\n\n`; });
+    if (sessionHistory.length === 0) return; const date = new Date().toLocaleDateString(); let content = `SERMON SCRIPTURE NOTES - ${date}\n\n`;
+    [...sessionHistory].reverse().forEach((item, index) => { content += `${index + 1}. ${item.reference} (${item.version})\n`; content += `"${item.text}"\n\n`; });
     const element = document.createElement("a"); const file = new Blob([content], {type: 'text/plain'});
     element.href = URL.createObjectURL(file); element.download = `sermon-notes-${Date.now()}.txt`; document.body.appendChild(element); element.click(); document.body.removeChild(element);
   };
@@ -143,57 +148,52 @@ const AudioMonitor = () => {
   };
   const isFavorited = (scripture) => { if (!scripture) return false; return favorites.some(f => f.reference === scripture.reference && f.version === scripture.version); };
 
-  // --- COLUMN CONTENT ---
+  // --- COLUMN CONTENT BLOCKS ---
 
-  // LEFT COLUMN: INPUTS
-  const leftColumn = (
-    <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-full">
-      <div className="bg-slate-800 p-3 border-b border-slate-700 flex flex-col gap-2 shrink-0">
-          <div className="flex justify-between items-center">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Bible Versions</span>
-              <div className="flex items-center gap-2">
-                  <div className={`h-2 w-2 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-                  <span className="text-[10px] text-slate-400 font-bold">{isListening ? 'ON AIR' : 'OFF'}</span>
-              </div>
-          </div>
-          <div className="flex items-center gap-1">
-            <select value={version} onChange={(e) => setVersion(e.target.value)} className="flex-1 bg-slate-950 text-white text-xs font-bold py-1 px-2 rounded border border-slate-600 focus:outline-none focus:border-purple-500">
-              <option value="KJV">KJV</option><option value="NIV">NIV</option><option value="NKJV">NKJV</option><option value="AMP">AMP</option><option value="ESV">ESV</option><option value="NLT">NLT</option><option value="GW">GW</option>
-            </select>
-            <span className="text-[10px] text-slate-500">+</span>
-            <select value={secondaryVersion} onChange={(e) => setSecondaryVersion(e.target.value)} className="flex-1 bg-slate-950 text-blue-200 text-xs font-bold py-1 px-2 rounded border border-blue-900 focus:outline-none focus:border-blue-500">
-              <option value="NONE">None</option><option value="KJV">KJV</option><option value="NIV">NIV</option><option value="NKJV">NKJV</option><option value="AMP">AMP</option><option value="ESV">ESV</option><option value="NLT">NLT</option><option value="GW">GW</option>
-            </select>
-          </div>
-      </div>
+  // 1. TOP LEFT: AUDIO INPUT
+  const LiveAudioPanel = (
+    <div className="flex flex-col h-full bg-slate-950">
+        <div className="bg-slate-800 p-2 border-b border-slate-700 flex justify-between items-center shrink-0">
+            <span className="text-xs font-bold text-slate-400">INPUT SOURCE</span>
+            <div className={`h-2 w-2 rounded-full ${isListening ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+        </div>
+        <div className="flex-1 p-4 overflow-y-auto font-mono text-xs leading-relaxed text-slate-400">
+            {error && <div className="text-red-400 mb-2 font-bold">{error}</div>}
+            <span>{transcript}</span> <span className="text-emerald-400 italic"> {interimTranscript}</span> <div ref={bottomRef} />
+        </div>
+    </div>
+  );
 
-      <div className="flex-1 bg-slate-950 p-4 overflow-y-auto font-mono text-xs leading-relaxed text-slate-400">
-          {error && <div className="text-red-400 mb-2 font-bold">{error}</div>}
-          <span>{transcript}</span> <span className="text-emerald-400 italic"> {interimTranscript}</span> <div ref={bottomRef} />
-      </div>
+  // 2. BOTTOM LEFT: SEARCH & CONTROLS
+  const SearchPanel = (
+    <div className="flex flex-col h-full bg-slate-900 border-t border-slate-700">
+        <div className="p-3 flex flex-col gap-2 h-full">
+            <div className="flex gap-2">
+                <button onClick={isListening ? stopListening : startListening} className={`flex-1 px-3 py-2 rounded font-bold text-xs text-white ${isListening ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>{isListening ? 'STOP MIC' : 'START MIC'}</button>
+                <button onClick={resetTranscript} className="px-3 py-2 bg-slate-700 text-slate-300 text-xs rounded hover:bg-slate-600 font-bold">CLEAR</button>
+            </div>
+            <div className="relative">
+                <form onSubmit={handleManualSearch} className="flex gap-1">
+                    <input type="text" value={manualInput} onChange={handleInputChange} placeholder="Type ref (e.g. jn 3 16)..." className="flex-1 bg-slate-950 text-white border border-slate-600 rounded px-2 py-3 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-600" autoComplete="off" />
+                    <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm">GO</button>
+                </form>
+                {showSuggestions && suggestions.length > 0 && <ul className="absolute bottom-full left-0 w-full bg-slate-800 border border-slate-600 rounded-lg shadow-xl mb-1 max-h-40 overflow-y-auto z-50">{suggestions.map((suggestion, index) => ( <li key={suggestion} onClick={() => selectSuggestion(suggestion)} className={`px-3 py-2 text-xs cursor-pointer ${index === activeSuggestionIndex ? 'bg-purple-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>{suggestion}</li> ))}</ul>}
+            </div>
+            {searchError && <div className="text-red-400 text-[10px] text-center">{searchError}</div>}
 
-      {/* Increased Height for Search Area as requested */}
-      <div className="p-4 bg-slate-800 border-t border-slate-700 flex flex-col gap-3 shrink-0 h-64">
-          <div className="flex gap-2">
-              <button onClick={isListening ? stopListening : startListening} className={`flex-1 px-3 py-2 rounded font-bold text-xs text-white transition-colors ${isListening ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'}`}>{isListening ? 'STOP MIC' : 'START MIC'}</button>
-              <button onClick={resetTranscript} className="px-3 py-2 bg-slate-700 text-slate-300 text-xs rounded hover:bg-slate-600 font-bold">CLEAR</button>
-          </div>
+            {/* Version Selectors */}
+            <div className="flex items-center gap-1 mt-auto">
+              <select value={version} onChange={(e) => setVersion(e.target.value)} className="flex-1 bg-slate-950 text-white text-[10px] font-bold py-1 px-2 rounded border border-slate-600">
+                <option value="KJV">KJV</option><option value="NIV">NIV</option><option value="NKJV">NKJV</option><option value="AMP">AMP</option><option value="ESV">ESV</option><option value="NLT">NLT</option><option value="GW">GW</option>
+              </select>
+              <span className="text-[10px] text-slate-500">+</span>
+              <select value={secondaryVersion} onChange={(e) => setSecondaryVersion(e.target.value)} className="flex-1 bg-slate-950 text-blue-200 text-[10px] font-bold py-1 px-2 rounded border border-blue-900">
+                <option value="NONE">None</option><option value="KJV">KJV</option><option value="NIV">NIV</option><option value="NKJV">NKJV</option><option value="AMP">AMP</option><option value="ESV">ESV</option><option value="NLT">NLT</option><option value="GW">GW</option>
+              </select>
+            </div>
 
-          <div className="relative">
-              <form onSubmit={handleManualSearch} className="flex gap-1">
-                  <input type="text" value={manualInput} onChange={handleInputChange} placeholder="Type ref (e.g. jn 3 16)..." className="flex-1 bg-slate-950 text-white border border-slate-600 rounded px-2 py-3 text-sm focus:border-purple-500 focus:outline-none placeholder-slate-600" autoComplete="off" />
-                  <button type="submit" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-sm">GO</button>
-              </form>
-              {showSuggestions && suggestions.length > 0 && (
-                  <ul className="absolute bottom-full left-0 w-full bg-slate-800 border border-slate-600 rounded-lg shadow-xl mb-1 max-h-40 overflow-y-auto z-50">
-                      {suggestions.map((suggestion, index) => ( <li key={suggestion} onClick={() => selectSuggestion(suggestion)} className={`px-3 py-2 text-xs cursor-pointer ${index === activeSuggestionIndex ? 'bg-purple-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}>{suggestion}</li> ))}
-                  </ul>
-              )}
-          </div>
-          {searchError && <div className="text-red-400 text-[10px] text-center">{searchError}</div>}
-
-          {previewScripture && (
-              <div className="flex-1 bg-slate-700/50 border border-blue-500/50 rounded p-2 animate-in fade-in slide-in-from-bottom-2 flex flex-col">
+            {previewScripture && (
+              <div className="mt-1 bg-slate-700/50 border border-blue-500/50 rounded p-2 animate-in fade-in slide-in-from-bottom-2 flex flex-col flex-1">
                   <div className="flex justify-between items-center mb-1">
                       <span className="text-blue-300 font-bold text-xs">{previewScripture.reference}</span>
                       <button onClick={() => setPreviewScripture(null)} className="text-[10px] text-slate-400 hover:text-white">✕</button>
@@ -204,24 +204,12 @@ const AudioMonitor = () => {
                       <button onClick={confirmProjection} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-1.5 rounded font-bold text-xs shadow">PROJECT NOW</button>
                   </div>
               </div>
-          )}
-
-          {favorites.length > 0 && (
-              <div className="pt-2 border-t border-slate-700 mt-auto">
-                  <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-none">
-                      {favorites.map((fav, idx) => (
-                          <button key={idx} onClick={() => { handleProject(fav); setActiveScripture(fav); addToHistory(fav); }} className="bg-purple-900/40 hover:bg-purple-800 border border-purple-500/30 text-purple-200 text-[10px] px-2 py-1 rounded min-w-[60px] whitespace-nowrap">
-                              <span className="font-bold block">{fav.reference}</span>
-                          </button>
-                      ))}
-                  </div>
-              </div>
-          )}
-      </div>
+            )}
+        </div>
     </div>
   );
 
-  // MIDDLE COLUMN: ACTIVE / PROCESSING
+  // 3. MIDDLE COLUMN: DETECTED & ACTIVE
   const middleColumn = (
     <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col h-full">
         <div className="bg-slate-800 p-3 border-b border-slate-700 flex justify-between items-center shrink-0">
@@ -230,16 +218,16 @@ const AudioMonitor = () => {
         </div>
 
         <div className="flex-1 bg-slate-900 p-4 overflow-y-auto space-y-4">
-            {activeScripture ? (
+            {activeDetection ? (
                 <div className="bg-purple-900/20 border border-purple-500/50 p-4 rounded-xl animate-in fade-in slide-in-from-bottom-4 duration-300 relative flex flex-col">
                     <div className="flex justify-between items-start mb-2 shrink-0">
                         <div className="flex items-center gap-2">
-                            <h3 className="text-xl font-bold text-white">{activeScripture.reference} <span className="text-xs font-normal text-purple-300">({activeScripture.version})</span></h3>
-                            <button onClick={() => toggleFavorite(activeScripture)} className={`text-lg hover:scale-110 transition-transform ${isFavorited(activeScripture) ? 'text-yellow-400' : 'text-slate-600 hover:text-yellow-200'}`} title="Favorite">★</button>
+                            <h3 className="text-xl font-bold text-white">{activeDetection.reference} <span className="text-xs font-normal text-purple-300">({activeDetection.version})</span></h3>
+                            <button onClick={() => toggleFavorite(activeDetection)} className={`text-lg hover:scale-110 transition-transform ${isFavorited(activeDetection) ? 'text-yellow-400' : 'text-slate-600 hover:text-yellow-200'}`} title="Favorite">★</button>
                         </div>
-                        <button onClick={() => handleProject(activeScripture)} className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-1.5 rounded font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer text-xs uppercase tracking-widest">PROJECT</button>
+                        <button onClick={() => handleProject(activeDetection)} className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-1.5 rounded font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer text-xs uppercase tracking-widest">PROJECT</button>
                     </div>
-                    <p className="text-purple-100 text-lg leading-relaxed font-serif mb-3 max-h-60 overflow-y-auto border-b border-purple-500/30 pb-3">"{activeScripture.text}"</p>
+                    <p className="text-purple-100 text-lg leading-relaxed font-serif mb-3 max-h-60 overflow-y-auto border-b border-purple-500/30 pb-3">"{activeDetection.text}"</p>
 
                     {/* Verse Jump List */}
                     {slides.length > 1 && (
@@ -263,7 +251,7 @@ const AudioMonitor = () => {
                 </div>
             )}
 
-            {history.length > 0 && (
+            {sessionHistory.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-slate-800 shrink-0">
                     <div className="flex justify-between items-center mb-3">
                         <h4 className="text-slate-500 text-xs uppercase font-bold tracking-wider">History</h4>
@@ -273,12 +261,12 @@ const AudioMonitor = () => {
                         </div>
                     </div>
                     <div className="max-h-48 overflow-y-auto space-y-1">
-                        {history.slice(1).map((item, idx) => (
+                        {sessionHistory.slice(1).map((item, idx) => (
                             <div key={idx} className="p-2 bg-slate-800/30 border border-slate-800 rounded flex justify-between items-center group hover:bg-slate-800 transition-colors">
                                 <div className="overflow-hidden mr-2"><span className="text-slate-300 font-bold text-xs block">{item.reference}</span><span className="text-slate-500 text-[10px] truncate block">{item.text}</span></div>
                                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button onClick={() => addToScriptureAgenda(item)} className="bg-slate-700 hover:bg-slate-600 text-white text-[10px] px-2 py-1 rounded" title="Add to Agenda">+</button>
-                                    <button onClick={() => { handleProject(item); setActiveScripture(item); }} className="bg-purple-700 hover:bg-purple-600 text-white text-[10px] px-2 py-1 rounded">Show</button>
+                                    <button onClick={() => { handleProject(item); updateActiveDetection(item); }} className="bg-purple-700 hover:bg-purple-600 text-white text-[10px] px-2 py-1 rounded">Show</button>
                                 </div>
                             </div>
                         ))}
@@ -289,56 +277,63 @@ const AudioMonitor = () => {
     </div>
   );
 
-  // RIGHT COLUMN: AGENDA & LIVE PREVIEW (Split Vertically)
-  const rightColumn = (
-    <div className="flex flex-col h-full gap-4">
-        {/* TOP: AGENDA (50%) */}
-        <div className="flex-1 bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl flex flex-col">
-            <div className="bg-slate-800 p-3 border-b border-slate-700 flex justify-between items-center">
-                <h2 className="text-sm font-bold text-green-400 flex items-center gap-2">📅 Agenda</h2>
-                {scriptureAgenda.length > 0 && <button onClick={clearScriptureAgenda} className="text-[10px] text-red-400 hover:text-red-300">Clear</button>}
-            </div>
-            <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                {scriptureAgenda.length === 0 ? (
-                    <div className="text-center text-slate-600 mt-10 text-xs italic">Agenda empty.</div>
-                ) : (
-                    scriptureAgenda.map((item, idx) => (
-                        <div key={idx} className="flex items-center gap-2 p-2 bg-slate-800/30 border border-slate-700 rounded group hover:bg-slate-800 transition-colors cursor-pointer" onClick={() => { handleProject(item); setActiveScripture(item); }}>
-                            <span className="text-xs font-mono text-slate-500 font-bold w-4">{idx + 1}</span>
-                            <div className="flex-1 min-w-0">
-                                <h4 className="text-sm font-bold text-slate-200 truncate">{item.reference}</h4>
-                                <span className="text-[10px] text-slate-500 truncate">{item.version}</span>
-                            </div>
-                            <button onClick={(e) => { e.stopPropagation(); removeFromScriptureAgenda(item.agendaId); }} className="text-slate-500 hover:text-red-400 px-2">×</button>
-                        </div>
-                    ))
-                )}
-            </div>
+  // 4. TOP RIGHT: AGENDA
+  const AgendaPanel = (
+    <div className="flex flex-col h-full bg-slate-900">
+        <div className="bg-slate-800 p-3 border-b border-slate-700 flex justify-between items-center">
+            <h2 className="text-sm font-bold text-green-400 flex items-center gap-2">📅 Agenda</h2>
+            {scriptureAgenda.length > 0 && <button onClick={clearScriptureAgenda} className="text-[10px] text-red-400 hover:text-red-300">Clear</button>}
         </div>
-
-        {/* BOTTOM: LIVE PREVIEW (50%) */}
-        <div className="flex-1 bg-black border border-slate-800 rounded-xl overflow-hidden shadow-2xl flex flex-col relative">
-            <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow z-10 animate-pulse">● LIVE OUTPUT</div>
-            <div className="flex-1 flex items-center justify-center p-6 bg-black">
-                {liveScripture ? (
-                    <div className="w-full text-center">
-                        <div className="inline-block px-3 py-1 rounded-t-lg mb-0 font-bold text-sm shadow-lg border-t border-l border-r" style={{ backgroundColor: theme.headerBackgroundColor || '#581c87', color: theme.headerTextColor || '#ffffff', borderColor: theme.headerBackgroundColor }}>{liveScripture.reference}</div>
-                        <div className="p-4 rounded-xl shadow-2xl border border-white/10" style={{ backgroundColor: theme.backgroundColor || '#0f172a', borderColor: '#334155' }}>
-                            <p className="font-serif text-sm leading-relaxed" style={{ color: theme.textColor || '#ffffff', fontFamily: fontFamily, textTransform: textTransform }}>{liveScripture.text}</p>
-                            {liveScripture.secondaryText && <div className="mt-2 pt-2 border-t border-white/10 opacity-80"><p className="font-serif text-sm leading-relaxed" style={{ color: theme.textColor || '#ffffff', fontFamily: fontFamily }}>{liveScripture.secondaryText}</p></div>}
+        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            {scriptureAgenda.length === 0 ? (
+                <div className="text-center text-slate-600 mt-10 text-xs italic">Agenda empty.</div>
+            ) : (
+                scriptureAgenda.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-2 p-2 bg-slate-800/30 border border-slate-700 rounded group hover:bg-slate-800 transition-colors cursor-pointer" onClick={() => { handleProject(item); updateActiveDetection(item); }}>
+                        <span className="text-xs font-mono text-slate-500 font-bold w-4">{idx + 1}</span>
+                        <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-bold text-slate-200 truncate">{item.reference}</h4>
+                            <span className="text-[10px] text-slate-500 truncate">{item.version}</span>
                         </div>
+                        <button onClick={(e) => { e.stopPropagation(); removeFromScriptureAgenda(item.agendaId); }} className="text-slate-500 hover:text-red-400 px-2">×</button>
                     </div>
-                ) : (
-                    <div className="text-white/20 font-mono text-xs text-center">[ WAITING ]</div>
-                )}
-            </div>
+                ))
+            )}
+        </div>
+    </div>
+  );
+
+  // 5. BOTTOM RIGHT: LIVE PREVIEW
+  const PreviewPanel = (
+    <div className="flex flex-col h-full bg-black">
+        <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow z-10 animate-pulse">● LIVE PREVIEW</div>
+        <div className="flex-1 flex items-center justify-center p-4 bg-black overflow-hidden relative">
+            {liveScripture ? (
+                // SCALING CONTAINER: We render the renderer at 100% width, then scale it down to fit the preview box
+                // The aspect-ratio is enforced by the parent container logic in SlideRenderer, but here we just need a box of the right shape
+                <div style={{ width: '100%', aspectRatio: aspectRatio === '12:5' ? '2.4/1' : '16/9' }}>
+                    <SlideRenderer
+                        content={liveScripture}
+                        theme={theme}
+                        fontSize={fontSize}
+                        layoutMode={layoutMode}
+                        textAlign={textAlign}
+                        aspectRatio={aspectRatio}
+                        fontFamily={fontFamily}
+                        textTransform={textTransform}
+                        isPreview={true}
+                    />
+                </div>
+            ) : (
+                <div className="text-white/20 font-mono text-xs text-center">[ WAITING ]</div>
+            )}
         </div>
     </div>
   );
 
   return (
-    <div className="w-full h-[calc(100vh-6rem)]">
-        {/* HELP MODAL */}
+    <div className="w-full h-[calc(100vh-6rem)] relative">
+        {/* HELP MODAL (Existing) */}
         {showHelp && (
             <div className="absolute inset-0 bg-slate-900/90 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
                 <div className="bg-slate-800 border border-slate-600 rounded-xl p-6 max-w-lg w-full shadow-2xl">
@@ -348,8 +343,10 @@ const AudioMonitor = () => {
                     </div>
                     <div className="space-y-2 text-sm text-slate-300">
                         <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Enter</span> <span>Search / Project Verse</span></div>
+                        <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Esc</span> <span>Clear Screen / Cancel</span></div>
                         <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Alt + P</span> <span>Project Detected Voice Verse</span></div>
-                        <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Right/Left Arrow</span> <span>Next/Prev Slide</span></div>
+                        <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Right Arrow</span> <span>Next Slide/Verse</span></div>
+                        <div className="flex justify-between bg-slate-700/50 p-2 rounded"><span className="font-bold text-white">Left Arrow</span> <span>Previous Slide/Verse</span></div>
                     </div>
                     <div className="mt-4 text-center"><button onClick={() => setShowHelp(false)} className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded font-bold">Got it!</button></div>
                 </div>
@@ -357,9 +354,17 @@ const AudioMonitor = () => {
         )}
 
         <ResizableGrid
-            left={leftColumn}
+            left={
+                <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl h-full">
+                    <ResizableVerticalStack top={LiveAudioPanel} bottom={SearchPanel} initialSplit={40} />
+                </div>
+            }
             middle={middleColumn}
-            right={rightColumn}
+            right={
+                <div className="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl h-full">
+                    <ResizableVerticalStack top={AgendaPanel} bottom={PreviewPanel} initialSplit={50} />
+                </div>
+            }
         />
     </div>
   );

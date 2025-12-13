@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useLayoutEffect } from 'react';
 import useSpeechRecognition from '../../hooks/useSpeechRecognition';
 import useScriptureDetection from '../../hooks/useScriptureDetection';
 import { useProjection } from '../../context/ProjectionContext';
@@ -55,17 +55,14 @@ const AudioMonitor = () => {
   const { isListening, transcript, interimTranscript, startListening, stopListening, resetTranscript, error } = useSpeechRecognition();
   const { detectedScripture: voiceDetected } = useScriptureDetection(transcript + ' ' + interimTranscript, currentBibleData, version);
 
-  // --- PERSISTENCE LOGIC ---
   const [activeScripture, setActiveScripture] = useState(null);
 
-  // 1. On Mount: Load from Global Store
   useEffect(() => {
       if (activeDetection) {
           setActiveScripture(activeDetection);
       }
   }, []);
 
-  // 2. Voice Input -> Updates Local & Global
   useEffect(() => {
       if (voiceDetected) {
           setActiveScripture(voiceDetected);
@@ -154,7 +151,6 @@ const AudioMonitor = () => {
 
   const confirmProjection = () => { if (previewScripture) handleProject(previewScripture); };
 
-  // Add to Agenda
   const handleAddToAgenda = (scripture) => {
       addToScriptureAgenda(scripture);
       setPreviewScripture(null);
@@ -243,7 +239,6 @@ const AudioMonitor = () => {
               </div>
             )}
 
-            {/* RESTORED FAVORITES BAR WITH LABEL */}
             {favorites.length > 0 && (
                 <div className="pt-2 border-t border-slate-700 mt-auto">
                     <h4 className="text-[10px] font-bold text-slate-400 uppercase mb-1">⭐ FAVORITES</h4>
@@ -277,7 +272,6 @@ const AudioMonitor = () => {
                             <button onClick={() => toggleFavorite(activeScripture)} className={`text-lg hover:scale-110 transition-transform ${isFavorited(activeScripture) ? 'text-yellow-400' : 'text-slate-600 hover:text-yellow-200'}`} title="Favorite">★</button>
                         </div>
 
-                        {/* --- +AGENDA BUTTON IS HERE --- */}
                         <div className="flex gap-2">
                             <button onClick={() => handleAddToAgenda(activeScripture)} className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded font-bold text-xs transition-transform hover:scale-105 active:scale-95 cursor-pointer shadow-sm" title="Add to Agenda">+ Agenda</button>
                             <button onClick={() => handleProject(activeScripture)} className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-1.5 rounded font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 cursor-pointer text-xs uppercase tracking-widest">PROJECT</button>
@@ -344,7 +338,7 @@ const AudioMonitor = () => {
                 <div className="text-center text-slate-600 mt-10 text-xs italic">Agenda empty.</div>
             ) : (
                 scriptureAgenda.map((item, idx) => (
-                    // FIX: Updated styles to match History list (Compact + Text Preview)
+                    // FIX: Click -> handleLoadPreview (Don't project yet)
                     <div
                         key={idx}
                         className="p-2 bg-slate-800/30 border border-slate-700 rounded flex justify-between items-center group hover:bg-slate-800 transition-colors cursor-pointer"
@@ -382,9 +376,27 @@ const AudioMonitor = () => {
             ● LIVE PREVIEW
         </div>
 
+        {/* SCALED PREVIEW CONTAINER */}
         <div className="flex-1 flex items-center justify-center p-4 bg-black overflow-hidden relative">
-            {liveScripture ? (
-                <div style={{ width: '100%', aspectRatio: aspectRatio === '12:5' ? '2.4/1' : '16/9' }}>
+            <div
+                className="relative origin-center"
+                style={{
+                    // This container simulates the projector screen aspect ratio
+                    // It scales down the SlideRenderer to fit the available space
+                    width: '100%',
+                    maxWidth: '100%',
+                    aspectRatio: aspectRatio === '12:5' ? '2.4 / 1' : '16 / 9',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                }}
+            >
+                {/* KEY FIX: SCALED PREVIEW RENDERER
+                   We render the SlideRenderer inside a container that forces it to behave like the real output,
+                   but we don't need CSS transform scale if we use % padding/sizes correctly in SlideRenderer.
+                   The SlideRenderer updates we did previously (px -> %) should handle this automatically now.
+                */}
+                 {liveScripture ? (
                     <SlideRenderer
                         content={liveScripture}
                         theme={theme}
@@ -396,10 +408,10 @@ const AudioMonitor = () => {
                         textTransform={textTransform}
                         isPreview={true}
                     />
-                </div>
-            ) : (
-                <div className="text-white/20 font-mono text-xs text-center">[ WAITING ]</div>
-            )}
+                ) : (
+                    <div className="text-white/20 font-mono text-xs text-center">[ WAITING ]</div>
+                )}
+            </div>
         </div>
     </div>
   );

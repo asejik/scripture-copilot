@@ -9,16 +9,20 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
     if (!containerRef.current) return;
     const el = containerRef.current;
 
-    // Reset to base size first
+    // 1. Start with the requested font size
+    // If it's a preview, we scale the starting font size down visually to avoid instant-overflow
+    // But for accurate calculation relative to container % width, we start with the raw value
+    // and let the loop handle it.
     el.style.fontSize = `${fontSize}px`;
 
     let currentSize = fontSize;
     let iterations = 0;
 
-    // Shrink if overflowing
+    // 2. Shrink if overflowing
+    // We check if content is bigger than the box
     while (
       (el.scrollHeight > el.clientHeight || el.scrollWidth > el.clientWidth) &&
-      currentSize > 16 &&
+      currentSize > 10 && // Allow shrinking down to 10px
       iterations < 50
     ) {
       currentSize -= 2;
@@ -32,9 +36,6 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
   const isLowerThird = layoutMode === 'LOWER_THIRD';
   const hasSecondary = !!content.secondaryText;
 
-  // Aspect Ratio
-  const ratioValue = aspectRatio === '12:5' ? '2.4 / 1' : '16 / 9';
-
   return (
     <div
         style={{
@@ -44,7 +45,7 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
             flexDirection: 'column',
             position: 'relative',
             justifyContent: isLowerThird ? 'flex-end' : 'center',
-            paddingBottom: isLowerThird ? '0' : '0' // Removed bottom padding to maximize space
+            paddingBottom: '0'
         }}
     >
         {/* HEADER TAB */}
@@ -58,8 +59,9 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
                 marginRight: isLowerThird ? '0' : 'auto',
                 marginBottom: '-1px',
                 zIndex: 20,
-                fontSize: isPreview ? '1em' : '2em', // Scaled for preview vs projector
-                padding: '0.2em 1em',
+                // Scale header text based on context
+                fontSize: isPreview ? '0.8em' : '2em',
+                padding: isPreview ? '0.2em 0.5em' : '0.2em 1em',
                 borderRadius: '0.5em 0.5em 0 0',
                 fontWeight: 'bold',
                 boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
@@ -78,7 +80,7 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
                 position: 'relative',
                 zIndex: 10,
                 overflow: 'hidden',
-                // Lower Third height increased to 40% to allow larger text
+                // Lower Third height logic
                 height: isLowerThird ? '40%' : '100%',
                 width: isLowerThird ? '95%' : '100%',
                 alignSelf: 'center',
@@ -92,8 +94,9 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
                     color: theme.textColor || '#ffffff',
                     width: '100%',
                     height: '100%',
-                    // FIX: Reverted to PX values so padding doesn't explode when font is large
-                    padding: aspectRatio === '12:5' ? '40px 60px' : '60px 80px',
+                    // FIX: Use Percentage Padding!
+                    // This ensures it scales perfectly in the small Preview box AND the big Projector.
+                    padding: aspectRatio === '12:5' ? '4%' : '6%',
                     overflow: 'hidden',
                     wordWrap: 'break-word',
                     whiteSpace: 'pre-wrap',
@@ -102,12 +105,12 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
                     fontFamily: fontFamily,
                     display: hasSecondary ? 'grid' : 'flex',
                     flexDirection: 'column',
-                    justifyContent: isLowerThird ? 'center' : 'center', // Always center vertically in box
+                    justifyContent: isLowerThird ? 'center' : 'center',
                     gridTemplateColumns: hasSecondary ? '1fr 1fr' : undefined,
-                    gap: hasSecondary ? '40px' : '0',
+                    gap: hasSecondary ? '5%' : '0', // Percent gap
                     textAlign: textAlign,
                     alignItems: textAlign === 'center' ? 'center' : 'flex-start',
-                    lineHeight: '1.2' // FIX: Tighter line height allows larger font
+                    lineHeight: '1.2'
                 }}
             >
                 <div className={`${hasSecondary ? "border-r border-slate-600 pr-5" : "w-full"}`}>

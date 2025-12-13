@@ -1,13 +1,9 @@
 import React, { useRef, useLayoutEffect } from 'react';
-import { useProjection } from '../context/ProjectionContext'; // Need context to get headerPosition
+import { useProjection } from '../context/ProjectionContext';
 
 const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspectRatio, fontFamily, textTransform, isPreview = false }) => {
   const containerRef = useRef(null);
   const boxRef = useRef(null);
-
-  // Need to grab headerPosition from Context manually since it's not passed as prop in old instances
-  // Or simpler: Update AudioMonitor to pass it.
-  // Best approach: Use the hook inside here if not passed.
   const { headerPosition } = useProjection();
 
   // Auto-shrink logic
@@ -33,19 +29,14 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
   const isLowerThird = layoutMode === 'LOWER_THIRD';
   const hasSecondary = !!content.secondaryText;
 
-  // --- HEADER POSITIONING LOGIC ---
-  // Default to TOP_CENTER if undefined
+  // Header Position Logic
   const pos = headerPosition || 'TOP_CENTER';
   const isBottom = pos.startsWith('BOTTOM');
 
-  // Alignment: Left, Center, or Right
-  let align = 'center';
-  if (pos.includes('LEFT')) align = 'flex-start';
-  if (pos.includes('RIGHT')) align = 'flex-end';
-
-  // Margins to create "Spacing" between header and body
-  // If Top: header needs margin-bottom. If Bottom: header needs margin-top.
-  const headerMargin = isBottom ? '10px 0 0 0' : '0 0 10px 0';
+  // Align the entire stack (Header + Body) based on position
+  let stackAlignItems = 'center'; // Default center
+  if (pos.includes('LEFT')) stackAlignItems = 'flex-start';
+  if (pos.includes('RIGHT')) stackAlignItems = 'flex-end';
 
   return (
     <div
@@ -55,21 +46,23 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
             display: 'flex',
             flexDirection: 'column',
             position: 'relative',
+            // If Lower Third, push everything to bottom. Else Center vertically.
             justifyContent: isLowerThird ? 'flex-end' : 'center',
             paddingBottom: '0'
         }}
     >
-        {/* CONTAINER FOR HEADER AND BODY */}
+        {/* STACK CONTAINER (Holds Header + Text Box tightly together) */}
         <div
             style={{
                 display: 'flex',
-                // COLUMN-REVERSE puts the first item (Header) at the bottom!
+                // This determines if Header is Above or Below Text
                 flexDirection: isBottom ? 'column-reverse' : 'column',
-                alignItems: align, // Controls Horizontal Alignment
+                // This aligns the Header Left/Center/Right relative to the text box
+                alignItems: stackAlignItems,
                 width: isLowerThird ? '95%' : '100%',
-                height: isLowerThird ? 'auto' : '100%', // Lower Third wraps content, Center fills
-                maxHeight: '100%',
-                alignSelf: 'center', // Center this stack horizontally in the outer container
+                alignSelf: 'center', // Center the stack horizontally in the screen
+                // GAP: This is the "One line" distance. 0.2em is very tight.
+                gap: '0.2em',
             }}
         >
 
@@ -78,21 +71,19 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
                 style={{
                     backgroundColor: theme.headerBackgroundColor || '#000000',
                     color: theme.headerTextColor || '#ffffff',
-                    zIndex: 20,
                     fontSize: isPreview ? '0.8em' : '1.5em',
-                    padding: isPreview ? '0.2em 0.5em' : '0.4em 1em',
+                    padding: isPreview ? '0.2em 0.5em' : '0.2em 1em',
                     fontWeight: 'bold',
-                    margin: headerMargin, // Dynamic margin based on position
-                    // Slight visual tweak: remove rounding if it floats freely, or keep it
                     borderRadius: '0.2em',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3)',
-                    flexShrink: 0 // Don't let header shrink
+                    zIndex: 20,
+                    // Prevent header from stretching full width if text is small
+                    alignSelf: stackAlignItems,
                 }}
             >
                 {content.reference}
             </div>
 
-            {/* MAIN BOX */}
+            {/* MAIN TEXT BOX */}
             <div
                 ref={boxRef}
                 style={{
@@ -100,9 +91,11 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
                     position: 'relative',
                     zIndex: 10,
                     overflow: 'hidden',
-                    width: '100%', // Fill width of the stack
-                    // Lower third gets fixed height logic, Center gets flexible
-                    height: isLowerThird ? '280px' : '100%',
+                    width: '100%',
+                    // FIX: Changed from fixed height (40%) to AUTO.
+                    // This creates the "Shrink Wrap" effect you wanted.
+                    height: 'auto',
+                    maxHeight: '100%',
                     borderRadius: '0.2em',
                 }}
             >
@@ -111,8 +104,8 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
                     style={{
                         color: theme.textColor || '#ffffff',
                         width: '100%',
-                        height: '100%',
-                        padding: aspectRatio === '12:5' ? '4%' : '6%',
+                        // FIX: Use Percentage padding for perfect scaling
+                        padding: aspectRatio === '12:5' ? '2%' : '4%',
                         overflow: 'hidden',
                         wordWrap: 'break-word',
                         whiteSpace: 'pre-wrap',
@@ -121,12 +114,13 @@ const SlideRenderer = ({ content, theme, fontSize, layoutMode, textAlign, aspect
                         fontFamily: fontFamily,
                         display: hasSecondary ? 'grid' : 'flex',
                         flexDirection: 'column',
-                        justifyContent: isLowerThird ? 'center' : 'center',
+                        // Align text inside the box
+                        justifyContent: 'center',
                         gridTemplateColumns: hasSecondary ? '1fr 1fr' : undefined,
                         gap: hasSecondary ? '5%' : '0',
                         textAlign: textAlign,
                         alignItems: textAlign === 'center' ? 'center' : 'flex-start',
-                        lineHeight: '1.2'
+                        lineHeight: '1.1' // Tight line height for compact look
                     }}
                 >
                     <div className={`${hasSecondary ? "border-r border-slate-600 pr-5" : "w-full"}`}>
